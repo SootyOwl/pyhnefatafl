@@ -1,0 +1,6 @@
+# png files
+*.png
+
+# pycache
+__pycache__
+.vscode
