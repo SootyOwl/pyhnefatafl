@@ -4,25 +4,22 @@ version = "0.1.0"
 description = ""
 authors = ["Your Name <you@example.com>"]
 readme = "README.md"
-packages = [{include = "hnefatafl", from = "src"}]
+packages = [{ include = "hnefatafl", from = "src" }]
 
 [tool.poetry.dependencies]
 python = "^3.9 <3.12"
-# add extra wheel for pypy support https://antocuni.github.io/pypy-wheels/manylinux2010
 numpy = "^1.24.1"
-tensorflow = "^2.11.0"
-
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.2.1"
 black = "^22.12.0"
 pytest-mock = "^3.10.0"
 
-
 [tool.poetry.group.ai.dependencies]
 PettingZoo = "^1.22.3"
+tensorflow = "^2.11.0"
 tflearn = "^0.5.0"
-
+tensorboard = "^2.11.2"
 
 [build-system]
 requires = ["poetry-core"]
