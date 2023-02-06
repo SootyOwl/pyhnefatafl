@@ -1,8 +1,5 @@
 """AI for Hnefatafl. Uses the Hnefatafl library for the game logic."""
-from functools import partial
-from multiprocessing import Pool
-import os
-import pickle
+from tqdm import tqdm
 
 import tensorflow as tf
 import hnefatafl as hn
@@ -41,7 +38,7 @@ LEGAL_OUTCOMES = [
     hn.Outcome(hn.Termination.STALEMATE, None),
 ]
 
-def initial_population(initial_games=10000, print_stats=False, print_every=100):
+def initial_population(initial_games=10000):
     """Generates the initial population of games to train on.
     Returns:
         training_data: An array of games, each game is a list of moves, each move is a tuple of
@@ -49,7 +46,7 @@ def initial_population(initial_games=10000, print_stats=False, print_every=100):
         outcomes: A list of outcomes for each game."""
     training_data = []
     outcomes = []
-    for i in range(initial_games):
+    for _ in tqdm(range(initial_games)):
         env.reset()
         observation, reward, terminated, truncated, info = env.last()
         game_memory = []
@@ -76,20 +73,17 @@ def initial_population(initial_games=10000, print_stats=False, print_every=100):
         if env.unwrapped.board.outcome() == hn.Outcome(hn.Termination.STALEMATE, None):
             continue
         training_data.append(game_memory)
-        if i % print_every == 0:
-            print(f"Game {i} of {initial_games} complete.")
-
-    # print some statistics about the initial population
-    if print_stats:
-        print(Counter([outcome.result() for outcome in outcomes]))
-        print(Counter([outcome.termination for outcome in outcomes]))
-        print(Counter([hn.COLOR_NAMES[outcome.winner] for outcome in outcomes if outcome.winner is not None]))
-        # average number of moves per game
-        print(mean([len(game) for game in training_data]))
-        # median number of moves per game
-        print(median([len(game) for game in training_data]))
     return training_data, outcomes
 
+def print_stats(training_data, outcomes) -> None:
+    print(Counter([outcome.result() for outcome in outcomes]))
+    print(Counter([outcome.termination for outcome in outcomes]))
+    print(Counter([hn.COLOR_NAMES[outcome.winner] for outcome in outcomes if outcome.winner is not None]))
+        # average number of moves per game
+    print(mean([len(game) for game in training_data]))
+        # median number of moves per game
+    print(median([len(game) for game in training_data]))
+    return
 
 def neural_network_model(input_size = 484) -> tflearn.DNN:
     """Creates a neural network model.
@@ -120,7 +114,7 @@ def neural_network_model(input_size = 484) -> tflearn.DNN:
     """14641 is the number of possible actions (11**4), representing the probability of
     each action being taken."""
 
-    network = regression(network, optimizer='adam', learning_rate=LR, loss='categorical_crossentropy', name='targets')
+    network = regression(network, optimizer='adam', learning_rate=LR, loss='categorical_crossentropy', name='targets', to_one_hot=True, n_classes=14641)
 
     return tflearn.DNN(network, tensorboard_dir='log')
 
@@ -140,34 +134,46 @@ def train_model(training_data, model=False):
     """Actions are integers from 0 to 14640 (11**4 - 1)"""
     y = [i[1] for game in training_data for i in game]
 
-    # perform one-hot encoding on the actions
-    y = tflearn.data_utils.to_categorical(y, 14641)
-
     if not model:
         model = neural_network_model(input_size = len(X[0]))
     model.fit({'input': X}, {'targets': y}, n_epoch=5, snapshot_step=500, show_metric=True, run_id='openaistuff')
     return model
 
-# use multiprocessing to speed up training data generation
-with Pool() as p:
-    """I have 8 cores on my machine, so I use 8 processes."""
-    results = p.map(initial_population, [10000]*8)  # 10000 games per process
 
-# combine the results from each process
-training_data = []
-outcomes = []
-for result in results:
-    training_data.extend(result[0])
-    outcomes.extend(result[1])
+# initial_games = 10000
+# # create the initial population
+# training_data, outcomes = initial_population(initial_games)
+# # print statistics about the initial population
+# print_stats(training_data, outcomes)
+# # save the initial population to a file
+# np.save("training_data.npy", training_data)
+# np.save("outcomes.npy", outcomes)
 
-# save the initial population to a file
-with open("training_data.pickle", "wb") as f:
-    pickle.dump(training_data, f)
 
+# train the neural network model
 # load the initial population from a file
-with open("training_data.pickle", "rb") as f:
-    training_data = pickle.load(f)
+training_data = np.load("training_data.npy", allow_pickle=True)
+outcomes = np.load("outcomes.npy", allow_pickle=True)
 
 model = train_model(training_data)
-# save the trained model to a file
+"""save the trained model to a file"""
 model.save("model.tflearn")
+
+# load the trained model from a file
+model = neural_network_model()
+model.load("model.tflearn")
+
+def play_game(model, env, render=False):
+    """Plays a game of hnefatafl. The game is played by the neural network model."""
+    env.reset()
+    observation, reward, terminated, truncated, info = env.last()
+    prev_observation = observation
+    while not terminated:
+        if render:
+            env.render()
+        action = np.argmax(model.predict(prev_observation['observation'].reshape(-1, 484, 1))[0])
+        env.step(action)
+        observation, reward, terminated, truncated, info = env.last()
+        prev_observation = observation
+    env.render()
+    return
