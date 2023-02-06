@@ -36,11 +36,16 @@ def get_observation(board: hn.BoardT, player: hn.Color) -> np.ndarray:
     # set the king position
     for square in king_position:
         observation[hn.square_rank(square), hn.square_file(square), 2] = 1
+
     # we need to include the player color in the observation for the neural network
     # to be able to distinguish between the two players (black and white)
-    player_color = np.zeros((11, 11), dtype=np.int8)
-    """The player color of the agent."""
-    player_color[:, :, 0] = player  # 0 if player 1, 1 if player 2
+    # we do this by adding a 4th channel to the observation, which is all zeros for black
+    # and all ones for white
+    if player == hn.BLACK:
+        player_color = np.zeros((11, 11, 1), dtype=np.int8)
+    else:
+        player_color = np.ones((11, 11, 1), dtype=np.int8)
+
     observation = np.concatenate((observation, player_color), axis=2)
     return observation
 
