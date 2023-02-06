@@ -584,7 +584,7 @@ class BaseBoard:
         piece = self.piece_type_at(square)
         if piece is None:
             return BB_EMPTY, BB_EMPTY, {}  # no piece at square
-                
+
         bb = BB_SQUARES[square]
         moves = self._moves(square)
 
@@ -603,7 +603,8 @@ class BaseBoard:
             # check up
             up = shift_up(BB_SQUARES[move]) & opponent & ~self.kings
             if up:
-                up = shift_up(up) & player # check if there is a friendly piece on the other side
+                # check if there is a friendly piece or the throne or a corner two squares up
+                up = shift_up(up) & (player | BB_THRONE | BB_CORNERS)
             if up:
                 captures |= BB_SQUARES[move]
                 pieces_captured_by_move |= shift_up(BB_SQUARES[move])
@@ -612,7 +613,7 @@ class BaseBoard:
             # check down
             down = shift_down(BB_SQUARES[move]) & opponent & ~self.kings
             if down:
-                down = shift_down(down) & player
+                down = shift_down(down) & (player | BB_THRONE | BB_CORNERS)
             if down:
                 captures |= BB_SQUARES[move]
                 pieces_captured_by_move |= shift_down(BB_SQUARES[move])
@@ -621,7 +622,7 @@ class BaseBoard:
             # check left
             left = shift_left(BB_SQUARES[move]) & opponent & ~self.kings
             if left:
-                left = shift_left(left) & player
+                left = shift_left(left) & (player | BB_THRONE | BB_CORNERS)
             if left:
                 captures |= BB_SQUARES[move]
                 pieces_captured_by_move |= shift_left(BB_SQUARES[move])
@@ -630,7 +631,7 @@ class BaseBoard:
             # check right
             right = shift_right(BB_SQUARES[move]) & opponent & ~self.kings
             if right:
-                right = shift_right(right) & player
+                right = shift_right(right) & (player | BB_THRONE | BB_CORNERS)
             if right:
                 captures |= BB_SQUARES[move]
                 pieces_captured_by_move |= shift_right(BB_SQUARES[move])
