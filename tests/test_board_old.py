@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from hnefatafl.board import Board, Game, Piece, Position, PieceType
+from hnefatafl.board_old import Board, Game, Piece, Position, PieceType
 
 
 @pytest.fixture

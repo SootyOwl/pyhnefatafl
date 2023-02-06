@@ -1,4 +1,3 @@
-"""Refactor of the classes in board.py."""
 import itertools
 from dataclasses import dataclass
 import os
@@ -32,7 +31,6 @@ class PieceType(Enum):
             or self.is_defender
             and other.is_attacker
         )
-
 
 # class so we can specify the position as a string, e.g. "A1" or "K5" rather than a tuple, but still use the tuple for calculations
 class Position(tuple):
