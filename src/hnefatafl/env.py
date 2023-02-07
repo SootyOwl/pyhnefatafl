@@ -46,7 +46,7 @@ class HnefataflEnv(AECEnv):
         self._agent_selector = agent_selector(self.agents)
 
         self.action_spaces = {
-            agent: spaces.Discrete(11 * 11 * 11 * 11) for agent in self.agents
+            agent: spaces.Discrete(121 * 2 * 11) for agent in self.agents
         }
         """Space of possible actions. Each action is a tuple of four integers
         (x1, y1, x2, y2), where (x1, y1) is the starting position of the piece
@@ -55,8 +55,8 @@ class HnefataflEnv(AECEnv):
         # Define the observation space, including the "observation" and the "action mask"
         self.observation_spaces = {
             agent: spaces.Dict({
-                'observation': spaces.Box(low=0, high=1, shape=(11, 11, 4), dtype=np.int8),
-                'action_mask': spaces.Box(low=0, high=1, shape=(11 * 11 * 11 * 11,), dtype=np.int8)
+                'observation': spaces.Box(low=0, high=1, shape=(11, 11, 4), dtype=np.int32),
+                'action_mask': spaces.Box(low=0, high=1, shape=(121 * 2 * 11,), dtype=np.int8)
             })
             for agent in self.agents
         }
@@ -104,7 +104,7 @@ class HnefataflEnv(AECEnv):
         legal_moves = (
             self.board.legal_moves if agent == self.agent_selection else []
         )
-        action_mask = np.zeros(14641, "int8")
+        action_mask = np.zeros(2662, "int8")
         for i in legal_moves:
             action = hn_utils.move_to_action(i)
             action_mask[action] = 1
