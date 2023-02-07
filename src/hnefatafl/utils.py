@@ -1,4 +1,5 @@
 """Utils for the hnefatafl package."""
+from functools import lru_cache
 import numpy as np
 import hnefatafl as hn
 
@@ -49,34 +50,46 @@ def get_observation(board: hn.BoardT, player: hn.Color) -> np.ndarray:
     observation = np.concatenate((observation, player_color), axis=2)
     return observation
 
+@lru_cache(maxsize=100000)
 def action_to_move(action: int) -> hn.Move:
-    """Converts the action (an int representing the move id in a flattened 11x11x11x11 array)
-    where the first two dimensions are the starting file and rank of the piece, the second two dimensions
-    are the ending file and rank of the piece, to a move.
+    """Converts the action (an int representing the move id in a flattened 121x2x11 array)
+    where the first number represent the starting position square, the third dimension is 0
+    if the piece is moving along the file axis and 1 if the piece is moving along the rank axis, 
+    and the fourth dimension is the destination square on the line of movement (file[0-10] or rank[0-10])
     """
-    start_rank = action // (11*11*11)
-    start_file = (action - start_rank*11*11*11) // (11*11)
-    end_rank = (action - start_rank*11*11*11 - start_file*11*11) // 11
-    end_file = action - start_rank*11*11*11 - start_file*11*11 - end_rank*11
-    start_square = hn.square(start_file, start_rank)
-    end_square = hn.square(end_file, end_rank)
-    move = hn.Move(start_square, end_square)
-    return move
+    # the action is the index of the 1 in the flattened array, so we can use np.unravel_index to get the
+    # starting square, axis, and destination square
+    from_square, axis, line_id = np.unravel_index(action, (121, 2, 11))
 
+    # convert the axis and line_id to a destination square
+    if axis == 0:  # file is the same as the starting square
+        to_square = hn.square(hn.square_file(from_square), line_id)
+    else:  # rank is the same as the starting square
+        to_square = hn.square(line_id, hn.square_rank(from_square))
 
+    return hn.Move(from_square, to_square)
+
+# cache the moves
+@lru_cache(maxsize=100000)
 def move_to_action(move: hn.Move) -> int:
-    """Converts the move to an action (an int representing the move index in a flattened 11x11x11x11 array)
-    where the first two dimensions are the starting file and rank of the piece, the second two dimensions
-    are the ending position of the piece.
+    """Converts the move to an action (an int representing the move index in a flattened 121x2x11 array)
+    where the first two dimensions reqpresent the starting position, the third dimension is 0
+    if the piece is moving along the file axis and 1 if the piece is moving along the rank axis,
+    and the fourth dimension is the destination square on the line of movement (file[0-10] or rank[0-10])
     """
-    start_square = move.from_square
-    end_square = move.to_square
-    start_rank = hn.square_rank(start_square)
-    start_file = hn.square_file(start_square)
-    end_rank = hn.square_rank(end_square)
-    end_file = hn.square_file(end_square)
-    action = start_rank*11*11*11 + start_file*11*11 + end_rank*11 + end_file
-    return action
+    # by checking if the file or rank of the starting square is the same as the destination square
+    if hn.square_file(move.from_square) == hn.square_file(move.to_square):
+        axis = 0
+    else:
+        axis = 1
+
+    # get the destination square id (0-10)
+    line_id = hn.square_rank(move.to_square) if axis == 0 else hn.square_file(move.to_square)
+
+    # calculate the action
+    action_zero = np.zeros((121, 2, 11), dtype=np.int32)
+    action_zero[move.from_square, axis, line_id] = 1
+    return np.argmax(action_zero)
 
 
 def result_to_int(result: str) -> int:
@@ -95,19 +108,25 @@ def result_to_int(result: str) -> int:
 
 
 if __name__ == "__main__":
-    # create a board and get the observation
-    board = hn.Board()
-    observation = get_observation(board, hn.BLACK)
-    print(observation["observation"].shape)
-    print(observation["action_mask"].shape)
+    # generate all *possible* moves and convert them to actions, then convert them back to moves and check that they are the same
+    # files are a-k, ranks are 1-10
+    action_to_move(11)
 
-    move = hn.Move(hn.A1, hn.K1)
-    print(move)
-    action = move_to_action(move)
-    print(action)
-    move = action_to_move(action)
-    print(move)
+    moves = []
+    non_null_moves = []
+    for i in range(2662):
+        move = action_to_move(i)
+        moves.append(move)
+        if not move:  # null move, part of the action space but just corresponds to moving to the same square as the starting square so we can ignore it
+            continue
+        action = move_to_action(move)
+        assert i == action, f"{i}, move: {move}, action: {action}"
+        non_null_moves.append(move)
 
-    assert move == hn.Move(hn.A1, hn.K1), f"{move} != {hn.Move(hn.A1, hn.K1)}"
-
-    print(action_to_move(12689))
+    print(len(moves))  # 2662 including null moves
+    print(len(non_null_moves))  # 2420 excluding the 242 null moves
+    assert len(set(non_null_moves)) == len(non_null_moves), "there are duplicate non-null moves in the action space"
+    null_move_indexes = {moves.index(move) for move in moves if not move}
+    print(sorted(null_move_indexes))
+    # this tells us that the null moves are at multiples of 22, so we can ignore them
+    # [0, 22, 44, 66, 88, 110, 132, 154, 176, 198, 220, ..., 2650]

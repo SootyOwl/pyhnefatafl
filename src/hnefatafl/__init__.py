@@ -381,7 +381,7 @@ class Move:
         return f"Move.from_code({self.code()!r})"
 
     def __bool__(self) -> bool:
-        return bool(self.from_square or self.to_square)
+        return bool(self.from_square != self.to_square)
 
     def code(self) -> str:
         """Returns the move code in algebraic notation.
@@ -429,6 +429,12 @@ class Move:
         False
         """
         return cls(0, 0)
+    
+    def is_null(self) -> bool:
+        """
+        Returns ``True`` if this is a null move.
+        """
+        return self.from_square == self.to_square
 
 
 BaseBoardT = TypeVar("BaseBoardT", bound="BaseBoard")
