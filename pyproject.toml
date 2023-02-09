@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{ include = "hnefatafl", from = "src" }, { include = "alphazero", from = "src" }]
 
 [tool.poetry.dependencies]
-python = "^3.9 <3.12"
+python = "^3.8 <3.12"
 numpy = "^1.24.1"
 scipy = "^1.10.0"
 coloredlogs = "^15.0.1"
