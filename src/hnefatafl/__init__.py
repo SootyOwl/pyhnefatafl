@@ -916,10 +916,6 @@ class BaseBoard:
                     square, PIECE_SYMBOLS.index(piece.lower()), piece.isupper()
                 )
 
-    def set_code(self, code: str) -> None:
-        """Sets the board from a board code."""
-        self._set_board_code(code)
-
     def piece_map(self, *, mask: Bitboard = BB_ALL) -> Dict[Square, Piece]:
         """Gets a dictionary mapping squares to pieces."""
         return {
@@ -1120,6 +1116,56 @@ class Board(BaseBoard):
         self.move_stack.clear()
         self._stack.clear()
 
+    def set_code(self, code: str) -> None:
+        """Sets the board from a board code."""
+        # split the code into parts
+        parts = code.strip().split(" ")
+        # if there are no parts, then the code is invalid
+        if not parts:
+            raise ValueError(f"expected board code, got empty string: {code!r}")
+        # the first part is the position part, which is required
+        position = parts[0]
+        # the second part is the turn part ('b' or 'w'), which is optional
+        turn = parts[1] if len(parts) > 1 else None
+        # the third part is the fullmove number, which is optional
+        fullmove_number = parts[2] if len(parts) > 2 else None
+
+        # set the position
+        self._set_board_code(position)
+
+        # set the turn
+        if turn:
+            if turn not in "bw":
+                raise ValueError(f"invalid turn in board code: {turn!r}")
+            self.turn = WHITE if turn == "w" else BLACK
+            # set the halfmove clock
+            self.halfmove_clock = 1 if self.turn is WHITE else 0
+        # set the fullmove number
+        if fullmove_number:
+            try:
+                self.fullmove_number = int(fullmove_number)
+            except ValueError as e:
+                raise ValueError(
+                    f"invalid fullmove number in board code: {fullmove_number!r}"
+                ) from e
+
+            if self.fullmove_number < 1:
+                raise ValueError(
+                    f"fullmove number must be positive: {fullmove_number!r}"
+                )
+            
+    def get_code(self) -> str:
+        """Returns a board code."""
+        return f"{self.board_code()} {self._get_turn_code()} {self._get_fullmove_number_code()}"
+    
+    def _get_turn_code(self) -> str:
+        """Returns a turn code."""
+        return "w" if self.turn is WHITE else "b"
+    
+    def _get_fullmove_number_code(self) -> str:
+        """Returns a fullmove number code."""
+        return str(self.fullmove_number)
+        
     def ply(self) -> int:
         return 2 * (self.fullmove_number - 1) + (self.turn == WHITE)
 
