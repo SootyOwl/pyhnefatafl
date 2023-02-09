@@ -1,179 +1,148 @@
-"""AI for Hnefatafl. Uses the Hnefatafl library for the game logic."""
-from tqdm import tqdm
+import os
+import time
+from typing import Tuple
 
-import tensorflow as tf
-import hnefatafl as hn
-from hnefatafl.env import env
 import numpy as np
-import tflearn
-from tflearn.layers.core import input_data, dropout, fully_connected
-from tflearn.layers.estimator import regression
-from statistics import median, mean
-from collections import Counter
-from pettingzoo.test import api_test
+from tensorflow.python.keras.layers import (
+    Activation,
+    Conv2D,
+    Dense,
+    Dropout,
+    Flatten,
+    Input,
+    Reshape,
+)
+from tensorflow.keras.layers import BatchNormalization
+from tensorflow.python.keras.models import Model
 
-env = env()  # create the environment
-# api_test(env, num_cycles=10000, verbose_progress=True)  # test the environment
-
-LR = 1e-3
-
-def some_random_games():
-    """Plays some random games to see how the environment works."""
-    for _ in range(20):
-        env.reset()
-        observation, reward, terminated, truncated, info = env.last()
-        for i, agent in enumerate(env.agent_iter()):
-            action = env.action_space(agent).sample(mask=observation["action_mask"])
-            env.step(action)
-            observation, reward, terminated, truncated, info = env.last()
-            if terminated:
-                print(f"Agent {agent} won!")
-                print(f"Game lasted {i} steps.")
-                print(f"Game result: {info}")
-                break
-
-LEGAL_OUTCOMES = [
-    hn.Outcome(hn.Termination.KING_CAPTURED, hn.BLACK),
-    hn.Outcome(hn.Termination.KING_ESCAPED, hn.WHITE),
-    hn.Outcome(hn.Termination.STALEMATE, None),
-]
-
-def initial_population(initial_games=10000):
-    """Generates the initial population of games to train on.
-    Returns:
-        training_data: An array of games, each game is a list of moves, each move is a tuple of
-            (observation, action, reward).
-        outcomes: A list of outcomes for each game."""
-    training_data = []
-    outcomes = []
-    for _ in tqdm(range(initial_games)):
-        env.reset()
-        observation, reward, terminated, truncated, info = env.last()
-        game_memory = []
-        prev_observation = observation
-        for agent in env.agent_iter(max_iter=1000):
-            action = env.action_space(agent).sample(mask=observation["action_mask"])
-            env.step(action)
-            observation, reward, terminated, truncated, info = env.last()
-            """The observation is a (11x11x4) tensor, where the first two dimensions are the black and white
-            pieces, and the third dimension is the king. The fourth dimension is all zeros if it is the
-            black player's turn, and all ones if it is the white player's turn.
-            The reward is 1 if the player won, -1 if the player lost, and 0 if the game is still going.
-            The terminated variable is True if the game is over, and False if the game is still going.
-            The truncated variable is True if the game ended in a stalemate, and False if the game is still going.
-            The info variable is a dictionary containing the outcome of the game.
-            The action is number between 0 and 14640, representing the move from a 11x11 board to a 11x11 board."""
-            game_memory.append([prev_observation['observation'], action, reward])
-            prev_observation = observation
-            if terminated:
-                assert env.unwrapped.board.outcome() in LEGAL_OUTCOMES
-                outcomes.append(env.unwrapped.board.outcome())
-                break
-        # if the game ended in a stalemate, we don't want to use it for training
-        if env.unwrapped.board.outcome() == hn.Outcome(hn.Termination.STALEMATE, None):
-            continue
-        training_data.append(game_memory)
-    return training_data, outcomes
-
-def print_stats(training_data, outcomes) -> None:
-    print(Counter([outcome.result() for outcome in outcomes]))
-    print(Counter([outcome.termination for outcome in outcomes]))
-    print(Counter([hn.COLOR_NAMES[outcome.winner] for outcome in outcomes if outcome.winner is not None]))
-        # average number of moves per game
-    print(mean([len(game) for game in training_data]))
-        # median number of moves per game
-    print(median([len(game) for game in training_data]))
-    return
-
-def neural_network_model(input_size = 484) -> tflearn.DNN:
-    """Creates a neural network model.
-    
-    Args:
-        input_size: The size of the input layer. This is the number of features in the
-            observation. The observation is a (11x11x4) tensor, so the input size is 484.
-    Returns:
-        network: The neural network model."""
-    network = input_data(shape=[None, input_size, 1], name='input', dtype=tf.float32)
-
-    network = fully_connected(network, 128, activation='relu')
-    network = dropout(network, 0.8)
-
-    network = fully_connected(network, 256, activation='relu')
-    network = dropout(network, 0.8)
-
-    network = fully_connected(network, 512, activation='relu')
-    network = dropout(network, 0.8)
-
-    network = fully_connected(network, 256, activation='relu')
-    network = dropout(network, 0.8)
-
-    network = fully_connected(network, 128, activation='relu')
-    network = dropout(network, 0.8)
-
-    network = fully_connected(network, 14641, activation='softmax')
-    """14641 is the number of possible actions (11**4), representing the probability of
-    each action being taken."""
-
-    network = regression(network, optimizer='adam', learning_rate=LR, loss='categorical_crossentropy', name='targets', to_one_hot=True, n_classes=14641)
-
-    return tflearn.DNN(network, tensorboard_dir='log')
-
-def train_model(training_data, model=False):
-    """Trains the neural network model.
-    
-    Args:
-        training_data: An array of games, each game is a list of moves, each move is a tuple of
-            (observation, action, reward).
-        model: The neural network model. If False, creates a new model.
-    Returns:
-        model: The trained neural network model."""
-    X = np.array([i[0] for game in training_data for i in game]).reshape(-1, 484, 1) 
-    """Observations are 11x11x4 tensors flattened into a 484x1 vector for input into
-    the neural network"""
-
-    """Actions are integers from 0 to 14640 (11**4 - 1)"""
-    y = [i[1] for game in training_data for i in game]
-
-    if not model:
-        model = neural_network_model(input_size = len(X[0]))
-    model.fit({'input': X}, {'targets': y}, n_epoch=5, snapshot_step=500, show_metric=True, run_id='openaistuff')
-    return model
+from alphazero.neuralnet import NeuralNet
+from alphazero.utils import *
 
 
-# initial_games = 10000
-# # create the initial population
-# training_data, outcomes = initial_population(initial_games)
-# # print statistics about the initial population
-# print_stats(training_data, outcomes)
-# # save the initial population to a file
-# np.save("training_data.npy", training_data)
-# np.save("outcomes.npy", outcomes)
+class TaflNNet:
+    def __init__(self, game, args):
+        # game params
+        self.board_x, self.board_y = game.getBoardSize()
+        self.action_size = game.getActionSize()
+        self.args = args
+
+        # Neural Net
+        self.input_boards = Input(
+            shape=(self.board_x, self.board_y, 4)
+        )  # s: batch_size x board_x x board_y
+
+        x_image = Reshape((self.board_x, self.board_y, 4))(
+            self.input_boards
+        )  # batch_size  x board_x x board_y x 1
+        h_conv1 = Activation("relu")(
+            BatchNormalization(axis=3)(
+                Conv2D(args.num_channels, 3, padding="same", use_bias=False)(x_image)
+            )
+        )  # batch_size  x board_x x board_y x num_channels
+        h_conv2 = Activation("relu")(
+            BatchNormalization(axis=3)(
+                Conv2D(args.num_channels, 3, padding="same", use_bias=False)(h_conv1)
+            )
+        )  # batch_size  x board_x x board_y x num_channels
+        h_conv3 = Activation("relu")(
+            BatchNormalization(axis=3)(
+                Conv2D(args.num_channels, 3, padding="valid", use_bias=False)(h_conv2)
+            )
+        )  # batch_size  x (board_x-2) x (board_y-2) x num_channels
+        h_conv4 = Activation("relu")(
+            BatchNormalization(axis=3)(
+                Conv2D(args.num_channels, 3, padding="valid", use_bias=False)(h_conv3)
+            )
+        )  # batch_size  x (board_x-4) x (board_y-4) x num_channels
+        h_conv4_flat = Flatten()(h_conv4)
+        s_fc1 = Dropout(args.dropout)(
+            Activation("relu")(
+                BatchNormalization(axis=1)(Dense(1024, use_bias=False)(h_conv4_flat))
+            )
+        )  # batch_size x 1024
+        s_fc2 = Dropout(args.dropout)(
+            Activation("relu")(
+                BatchNormalization(axis=1)(Dense(512, use_bias=False)(s_fc1))
+            )
+        )  # batch_size x 1024
+        self.pi = Dense(self.action_size, activation="softmax", name="pi")(
+            s_fc2
+        )  # batch_size x self.action_size
+        self.v = Dense(1, activation="tanh", name="v")(s_fc2)  # batch_size x 1
+
+        self.model = Model(inputs=self.input_boards, outputs=[self.pi, self.v])
+        self.model.compile(
+            loss=["categorical_crossentropy", "mean_squared_error"],
+            optimizer='adam',
+        )
 
 
-# train the neural network model
-# load the initial population from a file
-training_data = np.load("training_data.npy", allow_pickle=True)
-outcomes = np.load("outcomes.npy", allow_pickle=True)
+args = dotdict(
+    {
+        "lr": 0.001,
+        "dropout": 0.3,
+        "epochs": 10,
+        "batch_size": 64,
+        "cuda": False,
+        "num_channels": 512,
+    }
+)
 
-model = train_model(training_data)
-"""save the trained model to a file"""
-model.save("model.tflearn")
 
-# load the trained model from a file
-model = neural_network_model()
-model.load("model.tflearn")
+class NNetWrapper(NeuralNet):
+    def __init__(self, game):
+        self.nnet = TaflNNet(game, args)
+        self.board_x, self.board_y = game.getBoardSize()
+        self.action_size = game.getActionSize()
 
-def play_game(model, env, render=False):
-    """Plays a game of hnefatafl. The game is played by the neural network model."""
-    env.reset()
-    observation, reward, terminated, truncated, info = env.last()
-    prev_observation = observation
-    while not terminated:
-        if render:
-            env.render()
-        action = np.argmax(model.predict(prev_observation['observation'].reshape(-1, 484, 1))[0])
-        env.step(action)
-        observation, reward, terminated, truncated, info = env.last()
-        prev_observation = observation
-    env.render()
-    return
+    def train(self, examples):
+        """
+        examples: list of examples, each example is of form (board, pi, v)
+        """
+        input_boards, target_pis, target_vs = list(zip(*examples))
+        input_boards = np.asarray(input_boards)
+        target_pis = np.asarray(target_pis)
+        target_vs = np.asarray(target_vs)
+        self.nnet.model.fit(
+            x=input_boards,
+            y=[target_pis, target_vs],
+            batch_size=args.batch_size,
+            epochs=args.epochs,
+        )
+
+    def predict(self, board) -> Tuple[np.array, float]:
+        """Runs a prediction on a single board
+        
+        Arguments:
+            board {np.array} -- observation of the board state (11, 11, 4)
+
+        Returns:
+            (np.array, float) -- policy vector, value
+        """
+        # preparing input
+        board = board[np.newaxis, :, :]
+        # run
+        pi, v = self.nnet.model.predict(board)
+        return pi[0], v[0]
+
+    def save_checkpoint(self, folder="checkpoint", filename="checkpoint.pth.tar"):
+        # change extension
+        filename = filename.split(".")[0] + ".h5"
+
+        filepath = os.path.join(folder, filename)
+        if not os.path.exists(folder):
+            print(f"Checkpoint Directory does not exist! Making directory {folder}")
+            os.mkdir(folder)
+        else:
+            print("Checkpoint Directory exists! ")
+        self.nnet.model.save_weights(filepath)
+
+    def load_checkpoint(self, folder="checkpoint", filename="checkpoint.pth.tar"):
+        # change extension
+        filename = filename.split(".")[0] + ".h5"
+
+        # https://github.com/pytorch/examples/blob/master/imagenet/main.py#L98
+        filepath = os.path.join(folder, filename)
+        if not os.path.exists(filepath):
+            raise f"No model in path {filepath}"
+        self.nnet.model.load_weights(filepath)
