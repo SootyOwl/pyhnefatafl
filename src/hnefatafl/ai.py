@@ -73,7 +73,7 @@ class TaflNNet:
         self.model = Model(inputs=self.input_boards, outputs=[self.pi, self.v])
         self.model.compile(
             loss=["categorical_crossentropy", "mean_squared_error"],
-            optimizer='adam',
+            optimizer="adam",
         )
 
 
@@ -112,7 +112,7 @@ class NNetWrapper(NeuralNet):
 
     def predict(self, board) -> Tuple[np.array, float]:
         """Runs a prediction on a single board
-        
+
         Arguments:
             board {np.array} -- observation of the board state (11, 11, 4)
 

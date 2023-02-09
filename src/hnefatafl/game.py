@@ -36,11 +36,10 @@ class HnefataflGame:
         stringRepresentation
     """
 
-    def __init__(self, code=hn.Board().board_code()):
+    def __init__(self, code=hn.Board().board_code(), move_limit=200):
         super().__init__()
-        self.board: hn.BoardT = hn.KingEscapeAndCaptureEasierBoard(
-            code=code, move_limit=1000
-        )
+        self.move_limit = move_limit
+        self.board = hn.Board(code=code, move_limit=move_limit)
 
     def getInitBoard(self) -> np.ndarray:
         """Get the initial board."""
@@ -126,9 +125,6 @@ class HnefataflGame:
                             and changing the player to move."""
         return hn_utils.get_observation(board, player=board.turn)
 
-
-        
-
     @array_to_board
     def getSymmetries(
         self, board: hn.BoardT, pi: np.ndarray
@@ -146,20 +142,20 @@ class HnefataflGame:
                         The length of the list of symmetries should be the
                         number of symmetries of the game board, not including
                         the original board."""
-        # mirror x2, rotational x4
-        assert len(pi) == 2662  # 11x11 board with 2662 moves
-        pi_board = np.reshape(pi, (121, 2, 11))
-        l = []
-
-        # use board.mirror(vertical=True), board.mirror(vertical=False), np.rot90
-        # to get the symmetries
-        for i, j in itertools.product(range(2), range(4)):
-            newB = hn_utils.get_observation(board.mirror(vertical=i), player=board.turn)
-            newB = np.rot90(newB, k=j)
-            newPi = np.rot90(pi_board, k=j)
-            newPi = np.reshape(newPi, 2662)
-            l += [(newB, newPi)]
-        return l
+        ## mirror x2, rotational x4
+        # assert len(pi) == 2662  # 11x11 board with 2662 moves
+        # pi_board = np.reshape(pi, (121, 2, 11))
+        # l = []
+        # # use board.mirror(vertical=True), board.mirror(vertical=False), np.rot90
+        # # to get the symmetries
+        # for i, j in itertools.product(range(2), range(4)):
+        #     newB = hn_utils.get_observation(board.mirror(vertical=i), player=board.turn)
+        #     newB = np.rot90(newB, k=j)
+        #     newPi = np.rot90(pi_board, k=j)
+        #     newPi = np.reshape(newPi, 2662)
+        #     l += [(newB, newPi)]
+        # return l
+        return [(hn_utils.get_observation(board, player=board.turn), pi)]
                 
 
     @array_to_board
