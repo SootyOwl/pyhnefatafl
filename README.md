@@ -24,4 +24,4 @@ TODO
 
 ## Authors
 
--  [**@SootyOwl**]
+- [**@SootyOwl**]
