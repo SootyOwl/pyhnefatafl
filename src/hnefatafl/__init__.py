@@ -1056,21 +1056,24 @@ class Board(BaseBoard):
     turn: Color = BLACK
     """The side to move (``chess.WHITE`` or ``chess.BLACK``)."""
 
-    fullmove_number: int
-    """Counts the number of full moves. It starts at 1, and is incremented after White's move."""
 
-    halfmove_clock: int
-    """The number of halfmoves since the last capture."""
+
+    move_limit: int = 100
+    """The maximum number of moves allowed in a game."""
 
     def __init__(
-        self: BoardT, code: Optional[str] = STARTING_POSITION_CODE, *, move_limit=500
-    ) -> None:
+        self: BoardT, code: Optional[str] = STARTING_POSITION_CODE) -> None:
         BaseBoard.__init__(self, None)
         self.turn = BLACK
         self.move_stack = []
         self._stack: List[_BoardState[BoardT]] = []
-        self.move_limit = move_limit
         self._last_move: List[Move] = [Move.null(), Move.null()]
+
+        self.fullmove_number: int = 1
+        """Counts the number of full moves. It starts at 1, and is incremented after White's move."""
+
+        self.halfmove_clock: int = 0
+        """The number of halfmoves since the last capture."""
 
         if code is None:
             self.clear()
@@ -1649,11 +1652,6 @@ class SquareSet:
 
         return "".join(builder)
 
-    def _repr_svg_(self) -> str:
-        import chess.svg
-
-        return chess.svg.board(squares=self, size=390)
-
     @classmethod
     def ray(cls, a: Square, b: Square) -> "SquareSet":
         """
@@ -1708,6 +1706,14 @@ class SquareSet:
 
 
 class KingCapturedEasierBoard(Board):
+
+    # Board class variant that makes it easier to check if the king is captured.
+
+    def __init__(self: BoardT, code: Optional[str] = STARTING_POSITION_CODE) -> None:
+        super().__init__(code)
+        self.fullmove_number = 1
+        self.halfmove_clock = 0
+
     def king_capture(self) -> bool:
         """Check if the king is captured either by a sandwich outside of his throne,
         or by being surrounded by 4 enemies on the throne.
@@ -1776,6 +1782,14 @@ class KingCapturedEasierBoard(Board):
 
 
 class KingEscapeAndCaptureEasierBoard(KingCapturedEasierBoard):
+
+
+
+    def __init__(self: BoardT, code: Optional[str] = STARTING_POSITION_CODE) -> None:
+        super().__init__(code)
+        self.fullmove_number = 1
+        self.halfmove_clock = 0
+
     def king_escape(self) -> bool:
         return bool(self.kings & BB_EDGE)
 

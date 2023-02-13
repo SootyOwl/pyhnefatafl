@@ -10,8 +10,13 @@ def get_observation(board: hn.BoardT, player: hn.Color) -> np.ndarray:
     This is a 11x11x4 matrix where the first two dimensions are the board
     (black men are in the first channel, white men are in the second
     channel), the third channel is the king position, and the fourth channel
-    is the player's whose turn it is (all 0 for black, all ones for white)
-    Use bitwise operations to extract the information you need.
+    is for storing other information (e.g. current turn color, fullmovenumber,
+    etc.). In the case of hnefatafl, the fourth channel's first element is
+    the player color (0 for black, 1 for white), its second element is the
+    fullmovenumber, and its third element is the halfmovenumber, with the
+    remaining elements being 0.
+
+    Use bitwise operations to extract the information you need for the pieces.
     """
     black_pieces = board.occupied_co[hn.BLACK]  # bitboard of black pieces
     white_pieces = board.occupied_co[hn.WHITE]  # bitboard of  white pieces
@@ -24,7 +29,7 @@ def get_observation(board: hn.BoardT, player: hn.Color) -> np.ndarray:
     white_pieces = hn.SquareSet(white_pieces)
 
     # create the observation
-    observation = np.zeros((11, 11, 3), dtype=np.int8)
+    observation = np.zeros((11, 11, 4), dtype=np.int8)
     # set the black pieces
     for square in black_pieces:
         observation[hn.square_rank(square), hn.square_file(square), 0] = 1
@@ -35,16 +40,14 @@ def get_observation(board: hn.BoardT, player: hn.Color) -> np.ndarray:
     for square in king_position:
         observation[hn.square_rank(square), hn.square_file(square), 2] = 1
 
-    # we need to include the player color in the observation for the neural network
-    # to be able to distinguish between the two players (black and white)
-    # we do this by adding a 4th channel to the observation, which is all zeros for black
-    # and all ones for white
-    if board.turn is hn.BLACK:
-        player_color = np.zeros((11, 11, 1), dtype=np.int8)
-    else:
-        player_color = np.ones((11, 11, 1), dtype=np.int8)
+    # set the turn indicator
+    observation[:, :, 3][0, 0] = 0 if player == hn.BLACK else 1
+    # set the fullmovenumber
+    observation[:, :, 3][0, 1] = board.fullmove_number
 
-    observation = np.concatenate((observation, player_color), axis=2)
+    # set the halfmovenumber
+    observation[:, :, 3][0, 2] = board.halfmove_clock
+
     return observation
 
 
@@ -53,9 +56,12 @@ def get_board(
 ) -> hn.BoardT:
     """Returns a board from the observation."""
     # get the player color
-    turn_indicator = observation[:, :, 3]
+    turn_indicator = observation[:, :, 3][0, 0]
     assert np.all(turn_indicator == 0) or np.all(turn_indicator == 1)
-    player2move = hn.BLACK if turn_indicator[0, 0] == 0 else hn.WHITE
+    player2move = hn.BLACK if turn_indicator == 0 else hn.WHITE
+
+    fullmovenumber = observation[:, :, 3][0, 1]
+    halfmovenumber = observation[:, :, 3][0, 2]
 
     # get the king position
     king_position = observation[:, :, 2]
@@ -66,7 +72,7 @@ def get_board(
     black_pieces = _get_pieces_from_observation(observation, 0)
     white_pieces = _get_pieces_from_observation(observation, 1)
     # create the board
-    board: hn.BoardT = board_class(code=None)
+    board = board_class(code=None)
     # create a boardstate object
     board_state = hn._BoardState(board)
     # create squaresets for the pieces
@@ -81,8 +87,8 @@ def get_board(
     board_state.kings = king_position
     board_state.occupied = board_state.occupied_b | board_state.occupied_w
     board_state.turn = player2move
-    board_state.halfmove_clock = player2move
-    board_state.fullmove_number = 1
+    board_state.halfmove_clock = halfmovenumber
+    board_state.fullmove_number = fullmovenumber
     # set the board state
     board_state.restore(board)
     return board
@@ -103,7 +109,7 @@ def board_from_code(code: str) -> hn.BoardT:
     return board
 
 
-@lru_cache(maxsize=100000)
+@lru_cache(maxsize=10000)
 def action_to_move(action: int) -> hn.Move:
     """Converts the action (an int representing the move id in a flattened 121x2x11 array)
     where the first number represent the starting position square, the third dimension is 0
