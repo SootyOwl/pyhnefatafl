@@ -38,8 +38,8 @@ class HnefataflGame:
 
     def __init__(self, code=hn.Board().board_code(), move_limit=200):
         super().__init__()
-        self.move_limit = move_limit
-        self.board = hn.Board(code=code, move_limit=move_limit)
+        hn.Board.move_limit = move_limit  # set the move limit for all boards created in this game
+        self.board = hn.Board(code=code)
 
     def getInitBoard(self) -> np.ndarray:
         """Get the initial board."""
@@ -98,14 +98,32 @@ class HnefataflGame:
             player: current player (1 or -1)
 
         Returns:
-            1 if player won, -1 if player lost, 0 otherwise"""
+            1 if player won, -1 if player lost, otherwise a calculated value based on
+            the number of pieces remaining on the board."""
         # player 1 is black, player -1 is white
         if board.is_game_over():
-            # result_to_int returns -1 if black won, 1 if white won, 0 otherwise
-            r2i = hn_utils.result_to_int(board.result())
-            # if player is black, return 1 if black won, -1 if white won
-            return -r2i if player == 1 else r2i
-        return 0
+            outcome = board.outcome()
+            if outcome.winner is None:
+                # game is a draw, calculate the score
+                # black starts with 24 pieces, white starts with 12 pieces
+                # the score is the difference between the number of pieces
+                # each player has left
+                # the score is positive if black has more pieces, negative if white has more pieces
+                # the score is normalized to be between -1 and 1
+                # kings are excluded from the count
+                black_pieces = len(board.pieces(hn.BLACK, False)) / 24
+                white_pieces = len(board.pieces(hn.WHITE, False)) / 12
+                score = black_pieces - white_pieces  # positive if black has more pieces left than white (black is winning) and negative if white has more pieces left than black (white is winning)
+                if score == 0:
+                    # we can't return 0 because that means the game is not over, so return a small value
+                    return 1e-3
+                
+                return score * player * 1e-3 # small value so that winning is more important than the score
+            elif outcome.winner == hn.BLACK:
+                return 1 if player == 1 else -1
+            elif outcome.winner == hn.WHITE:
+                return 1 if player == -1 else -1
+        return 0  # game is not over
 
     @array_to_board
     def getCanonicalForm(self, board: hn.BoardT, player) -> np.ndarray:

@@ -1,8 +1,10 @@
+from datetime import datetime
 import os
 import time
 from typing import Tuple
 
 import numpy as np
+import tensorflow as tf
 from tensorflow.python.keras.layers import (
     Activation,
     Conv2D,
@@ -74,6 +76,7 @@ class TaflNNet:
         self.model.compile(
             loss=["categorical_crossentropy", "mean_squared_error"],
             optimizer="adam",
+            metrics=["accuracy"],
         )
 
 
@@ -83,8 +86,9 @@ args = dotdict(
         "dropout": 0.3,
         "epochs": 10,
         "batch_size": 64,
-        "cuda": False,
-        "num_channels": 512,
+        "cuda": True,
+        "num_channels": 512,  # 512
+        "tensorboard": True,
     }
 )
 
@@ -100,15 +104,34 @@ class NNetWrapper(NeuralNet):
         examples: list of examples, each example is of form (board, pi, v)
         """
         input_boards, target_pis, target_vs = list(zip(*examples))
-        input_boards = np.asarray(input_boards)
+        input_boards = self.prepare_input(input_boards)
         target_pis = np.asarray(target_pis)
         target_vs = np.asarray(target_vs)
+
+        # set up callbacks
+        if args.tensorboard:
+            tensorboard_callback = tf.keras.callbacks.TensorBoard(
+                log_dir=os.path.join("logs/fit", datetime.now().strftime("%Y%m%d-%H%M%S")),
+                histogram_freq=1,
+            )
+            callbacks = [tensorboard_callback]
+        else:
+            callbacks = []
+
         self.nnet.model.fit(
             x=input_boards,
             y=[target_pis, target_vs],
             batch_size=args.batch_size,
             epochs=args.epochs,
+            callbacks=callbacks,
         )
+
+    def prepare_input(self, boards) -> np.array:
+        """Prepares the input for the neural network"""
+        # the board observation is (11, 11, 4)
+        boards = np.asarray(boards)
+        boards[:, :, :, 3] = boards[:, :, :, 3][0, 0]
+        return boards
 
     def predict(self, board) -> Tuple[np.array, float]:
         """Runs a prediction on a single board
@@ -120,6 +143,8 @@ class NNetWrapper(NeuralNet):
             (np.array, float) -- policy vector, value
         """
         # preparing input
+        # expand the first element of fourth dimension to the whole fourth dimension (this is the turn indicator)
+        board[:, :, 3] = board[:, :, 3][0, 0]
         board = board[np.newaxis, :, :]
         # run
         pi, v = self.nnet.model.predict(board)
@@ -144,5 +169,5 @@ class NNetWrapper(NeuralNet):
         # https://github.com/pytorch/examples/blob/master/imagenet/main.py#L98
         filepath = os.path.join(folder, filename)
         if not os.path.exists(filepath):
-            raise f"No model in path {filepath}"
+            raise FileNotFoundError(f"File {filepath} does not exist")
         self.nnet.model.load_weights(filepath)
