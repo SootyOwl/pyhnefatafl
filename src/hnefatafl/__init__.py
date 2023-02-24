@@ -71,7 +71,7 @@ UNICODE_PIECE_SYMBOLS = {
 """Unicode symbols for pieces."""
 
 FILE_NAMES = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"]
-RANK_NAMES = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "+", "*"]
+RANK_NAMES = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "+", "#"]
 
 STARTING_POSITION_CODE = (
     "3mmmmm3/5m5/11/m4M4m/m3MMM3m/mm1MMKMM1mm/m3MMM3m/m4M4m/11/5m5/3mmmmm3 b 0"
@@ -944,7 +944,37 @@ class BaseBoard:
                 builder.append(".")
             if BB_SQUARES[square] & BB_FILE_K and square != K11:
                 builder.append("\n")
+
+        builder = self._add_file_names(builder)
+        builder = self._add_rank_names(builder)
         return "".join(builder)
+    
+    def _add_file_names(self, builder: List[str]) -> List[str]:
+        """Adds the file (a-k) names to the top of the board string.
+
+        The file names are added to the beginning of each file, in other words,
+        the file names are added to the top of the board.
+        """
+        # add the file names to the top of the board
+        file_string = "".join(FILE_NAMES)
+        builder.insert(0, f"{file_string}\n")        
+        return builder
+    
+    def _add_rank_names(self, builder: List[str]) -> List[str]:
+        """Adds the rank (1-11) names to the board string.
+        
+        The rank names are added to the end of each rank. 10 and 11 are
+        represented by the symbols '+' and '#', respectively.
+        Args:
+            builder: The list of strings to add the rank names to."""
+        # find the indexes of the newlines and insert the rank names before them
+        newline_indexes = [i for i, c in enumerate(builder) if c == "\n"]
+        for i, index in enumerate(newline_indexes):
+            builder.insert(index + i, f" {RANK_NAMES[i]}")
+
+        # add the last rank name
+        builder.append(f" {RANK_NAMES[-1]}")
+        return builder
 
     def unicode(
         self,
@@ -1056,8 +1086,6 @@ class Board(BaseBoard):
     turn: Color = BLACK
     """The side to move (``chess.WHITE`` or ``chess.BLACK``)."""
 
-
-
     move_limit: int = 100
     """The maximum number of moves allowed in a game."""
 
@@ -1066,6 +1094,7 @@ class Board(BaseBoard):
         BaseBoard.__init__(self, None)
         self.turn = BLACK
         self.move_stack = []
+        self._captured_pieces: Dict[Color, Piece] = {WHITE: [], BLACK: []}
         self._stack: List[_BoardState[BoardT]] = []
         self._last_move: List[Move] = [Move.null(), Move.null()]
 
@@ -1274,19 +1303,24 @@ class Board(BaseBoard):
             return
 
         # get the from and to squares
-        piece_type = self._remove_piece_at(move.from_square)
+        piece_type = self.piece_at(move.from_square)
         assert piece_type is not None, f"no piece at {move.from_square}, {move}, {self.board_code()} \n {self}"
+
         captured_piece_types = None
         # check whether the move is a capture
         _, _, capture_map = self._captures_possible(move.from_square)
+        # remove the piece at the from square
+        self._remove_piece_at(move.from_square)
+        # if the move is a capture, remove the piece at the to square
+        # put the piece at the to square
+        self._set_piece_at(move.to_square, piece_type.piece_type, self.turn)
+
         if move.to_square in capture_map.keys():
             self.halfmove_clock = 0
             captured_piece_types = [
-                self._remove_piece_at(sq) for sq in capture_map[move.to_square]
+                self._remove_piece_at(sq) for sq in SquareSet(*capture_map[move.to_square])
             ]
 
-        # put the piece at the to square
-        self._set_piece_at(move.to_square, piece_type, self.turn)
         if captured_piece_types:
             self._captured_pieces[self.turn].extend(captured_piece_types)
 
@@ -1640,7 +1674,6 @@ class SquareSet:
 
     def __str__(self) -> str:
         builder = []
-
         for square in SQUARES:
             mask = BB_SQUARES[square]
             builder.append("1" if self.mask & mask else ".")
@@ -1833,7 +1866,5 @@ if __name__ == "__main__":
     # moves = [game.fullmove_number for game in games]
     # print(sum(moves) / len(moves))
 
-    s = SquareSet(BB_RANK_4 | BB_FILE_C)
-    print(s)
-    print(s.mirror())
-    print(s.mirror(vertical=False))
+    board = KingEscapeAndCaptureEasierBoard()
+    print(board)
