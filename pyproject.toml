@@ -2,9 +2,9 @@
 name = "hnefatafl"
 version = "0.1.0"
 description = ""
-authors = ["Your Name <you@example.com>"]
+authors = ["SootyOwl <you@example.com>"]
 readme = "README.md"
-packages = [{ include = "hnefatafl", from = "src" }, { include = "alphazero", from = "src" }]
+packages = [{ include = "hnefatafl", from = "src" }]
 
 [tool.poetry.dependencies]
 python = "^3.8 <3.12"
@@ -12,6 +12,9 @@ numpy = "^1.24.1"
 scipy = "^1.10.0"
 coloredlogs = "^15.0.1"
 tqdm = "^4.64.1"
+memory-profiler = "^0.61.0"
+matplotlib = "^3.7.0"
+ipywidgets = "^8.0.4"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.2.1"
@@ -20,10 +23,8 @@ pytest-mock = "^3.10.0"
 ipykernel = "^6.21.1"
 
 [tool.poetry.group.ai.dependencies]
-PettingZoo = "^1.22.3"
-tensorflow = "^2.11.0"
-tflearn = "^0.5.0"
-tensorboard = "^2.11.2"
+torch = "1.13.1.post200"  # ensures that the torch version from conda is not upgraded
+muzero-baseline = "^0.4.0"
 
 [build-system]
 requires = ["poetry-core"]
