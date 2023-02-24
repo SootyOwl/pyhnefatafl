@@ -7,14 +7,11 @@ import hnefatafl as hn
 def get_observation(board: hn.BoardT, player: hn.Color) -> np.ndarray:
     """Returns the observation of the board.
 
-    This is a 11x11x4 matrix where the first two dimensions are the board
+    This is a 4x11x11 matrix where the first two dimensions are the board
     (black men are in the first channel, white men are in the second
     channel), the third channel is the king position, and the fourth channel
-    is for storing other information (e.g. current turn color, fullmovenumber,
-    etc.). In the case of hnefatafl, the fourth channel's first element is
-    the player color (0 for black, 1 for white), its second element is the
-    fullmovenumber, and its third element is the halfmovenumber, with the
-    remaining elements being 0.
+    is for storing current turn color. In the case of hnefatafl, 
+    the fourth channel's is the player color (0 for black, 1 for white).
 
     Use bitwise operations to extract the information you need for the pieces.
     """
@@ -29,24 +26,20 @@ def get_observation(board: hn.BoardT, player: hn.Color) -> np.ndarray:
     white_pieces = hn.SquareSet(white_pieces)
 
     # create the observation
-    observation = np.zeros((11, 11, 4), dtype=np.int8)
+    observation = np.zeros((4, 11, 11), dtype=np.int8)
     # set the black pieces
     for square in black_pieces:
-        observation[hn.square_rank(square), hn.square_file(square), 0] = 1
+        observation[0, hn.square_rank(square), hn.square_file(square)] = 1
     # set the white pieces
     for square in white_pieces:
-        observation[hn.square_rank(square), hn.square_file(square), 1] = 1
+        observation[1, hn.square_rank(square), hn.square_file(square)] = 1
     # set the king position
     for square in king_position:
-        observation[hn.square_rank(square), hn.square_file(square), 2] = 1
+        observation[2, hn.square_rank(square), hn.square_file(square)] = 1
 
-    # set the turn indicator
-    observation[:, :, 3][0, 0] = 0 if player == hn.BLACK else 1
-    # set the fullmovenumber
-    observation[:, :, 3][0, 1] = board.fullmove_number
-
-    # set the halfmovenumber
-    observation[:, :, 3][0, 2] = board.halfmove_clock
+    # the final channel is the turn indicator, which is the player color
+    turn_indicator = 0 if player == hn.BLACK else 1
+    observation[3, :, :] = turn_indicator
 
     return observation
 
@@ -59,9 +52,6 @@ def get_board(
     turn_indicator = observation[:, :, 3][0, 0]
     assert np.all(turn_indicator == 0) or np.all(turn_indicator == 1)
     player2move = hn.BLACK if turn_indicator == 0 else hn.WHITE
-
-    fullmovenumber = observation[:, :, 3][0, 1]
-    halfmovenumber = observation[:, :, 3][0, 2]
 
     # get the king position
     king_position = observation[:, :, 2]
@@ -87,8 +77,6 @@ def get_board(
     board_state.kings = king_position
     board_state.occupied = board_state.occupied_b | board_state.occupied_w
     board_state.turn = player2move
-    board_state.halfmove_clock = halfmovenumber
-    board_state.fullmove_number = fullmovenumber
     # set the board state
     board_state.restore(board)
     return board
