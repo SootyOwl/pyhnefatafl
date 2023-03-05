@@ -4,5 +4,4 @@
 # pycache
 __pycache__
 .vscode
-checkpoint/
-logs/
+results/muzero/

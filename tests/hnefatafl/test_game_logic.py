@@ -51,7 +51,7 @@ from hnefatafl import (
 
 @pytest.fixture
 def board():
-    return KingEscapeAndCaptureEasierBoard()
+    return KingEscapeAndCaptureEasierBoard(strict=False)
 
 
 @pytest.fixture
@@ -314,6 +314,57 @@ def test_king_can_move_into_sandwiched_position_without_being_captured(
     ), f'Piece at {parse_square("e5")} should not have been captured.'
 
 
+# Test that pieces can be captured against the throne as long as the king is not there
+@pytest.mark.parametrize("color", [WHITE, BLACK])
+def test_piece_can_be_captured_against_throne(
+    empty_board: KingEscapeAndCaptureEasierBoard, color: bool
+):
+    # set up board with piece to be sandwiched
+    empty_board.set_piece_map(
+        {
+            parse_square("d7"): Piece.from_symbol("M" if color else "m"),
+            parse_square("e6"): Piece.from_symbol("m" if color else "M"),
+        }
+    )
+    empty_board.turn = color
+    move = Move(parse_square("d7"), parse_square("d6"))
+    assert empty_board.is_legal(move) is True, f"Move {move} should be legal."
+
+    # make the move
+    empty_board.push(move)
+    assert (
+        empty_board.piece_at(parse_square("d7")) is None
+    ), f'Piece at {parse_square("d7")} should have moved.'
+    assert (
+        empty_board.piece_at(parse_square("e6")) is None
+    ), f'Piece at {parse_square("e6")} should have been captured.'
+
+
+# Test that white pieces cannot be captured against the throne if the king is there
+def test_white_piece_cannot_be_captured_against_throne_if_king_is_there(
+    empty_board: KingEscapeAndCaptureEasierBoard,
+):
+    # set up board with piece to be sandwiched
+    empty_board.set_piece_map(
+        {
+            parse_square("d7"): Piece.from_symbol("m"),
+            parse_square("e6"): Piece.from_symbol("M"),
+            parse_square("f6"): Piece.from_symbol("K"),
+        }
+    )
+    empty_board.turn = BLACK
+    move = Move(parse_square("d7"), parse_square("d6"))
+
+    # make the move
+    empty_board.push(move)
+    assert (
+        empty_board.piece_at(parse_square("d7")) is None
+    ), f'Piece at {parse_square("d7")} should have moved.'
+    assert (
+        empty_board.piece_at(parse_square("e6")) is not None
+    ), f'Piece at {parse_square("e6")} should not have been captured.'
+
+
 # Win
 @pytest.mark.parametrize("edge", ["A", "K", "1", "#"])
 def test_king_escape_endgame(
@@ -473,3 +524,55 @@ def test_no_legal_moves(empty_board: KingEscapeAndCaptureEasierBoard):
     assert outcome is not None
     assert outcome.winner is None
     assert outcome.termination == Termination.STALEMATE
+
+
+# Test strict mode, which forces the game to end if there is a move which would result in a king capture or escape
+def test_strict_mode_king_capture(empty_board: KingEscapeAndCaptureEasierBoard):
+    """Test that if the king can be captured, that is the only legal move in strict mode."""
+    empty_board.set_piece_map(
+        {
+            parse_square("e7"): Piece.from_symbol("K"),
+            parse_square("e6"): Piece.from_symbol("m"),
+            parse_square("e8"): Piece.from_symbol("m"),
+            parse_square("d6"): Piece.from_symbol("m"),
+            parse_square("f7"): Piece.from_symbol("m"),
+        }
+    )
+    empty_board.turn = BLACK
+    empty_board.strict = True
+    # get the legal moves
+    legal_moves = list(empty_board.legal_moves)
+    assert len(legal_moves) == 1
+    assert legal_moves[0].from_square == parse_square("d6")
+    assert legal_moves[0].to_square == parse_square("d7")
+
+    empty_board.push(legal_moves[0])
+    outcome = empty_board.outcome()
+    assert outcome is not None
+    assert outcome.winner == BLACK
+    assert outcome.termination == Termination.KING_CAPTURED
+
+
+def test_strict_mode_king_escape(empty_board: KingEscapeAndCaptureEasierBoard):
+    """Test that if the king can escape, that is the only legal move in strict mode."""
+    empty_board.set_piece_map(
+        {
+            parse_square("e7"): Piece.from_symbol("K"),
+            parse_square("e6"): Piece.from_symbol("m"),
+            parse_square("e8"): Piece.from_symbol("m"),
+            parse_square("d6"): Piece.from_symbol("m"),
+            parse_square("f7"): Piece.from_symbol("m"),
+        }
+    )
+    empty_board.turn = WHITE
+    empty_board.strict = True
+    # get the legal moves
+    legal_moves = list(empty_board.legal_moves)
+    assert len(legal_moves) == 1
+    assert legal_moves[0].from_square == parse_square("e7")
+    assert legal_moves[0].to_square == parse_square("a7")
+
+    empty_board.push(legal_moves[0])
+    assert empty_board.outcome() is not None
+    assert empty_board.outcome().winner == WHITE
+    

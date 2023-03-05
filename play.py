@@ -3,29 +3,32 @@ assert torch.cuda.is_available(), "CUDA is not available!"
 
 from muzero_baseline.muzero import MuZero
 
-from hnefatafl.muzero import HnefataflGame, MuZeroConfig
+from hnefatafl.muzero import HnefEnv, HnefataflGame, MuZeroConfig, MuZeroResnetSmallLargerHead
 import os
-config = MuZeroConfig()
-config.max_num_gpus = 1
-config.train_on_gpu = True
-config.reanalyse_on_gpu = False
-config.batch_size = 1
-config.training_steps = 10000
-config.num_workers = 1
-config.support_size = 10 
-mz = MuZero(HnefataflGame, config)
-
 
 
 # load the model if we have a checkpoint to load (model.checkpoint in config.results_path)
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument("--load-path", default=None, type=str)
+parser.add_argument("--checkpoint", default="model.checkpoint", type=str)
+parser.add_argument("--board", type=str, default=None)
 args = parser.parse_args()
 
-run_path = os.path.join(args.load_path)
-checkpoint_path = os.path.join(run_path, "model.checkpoint")
+# set the board if we have one
+if args.board:
+    # DEFAULT_BOARD_CODE = args.board doesn't work because it's a constant, so we have to do this
+    HnefEnv.DEFAULT_BOARD_CODE = args.board
+
+config = MuZeroResnetSmallLargerHead()
+config.num_workers = 1
+config.max_moves = 100
+config.temperature_threshold = 30
+mz = MuZero(HnefataflGame, config)
+
+checkpoint_path = os.path.join(args.checkpoint)
 
 mz.load_model(checkpoint_path)
 
-mz.test_direct(render=True, opponent="self", muzero_player=0)
+results = mz.test_direct(render=True, opponent="human", muzero_player=0, num_tests=1)
+
+print("Results: ", results)

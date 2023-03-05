@@ -25,7 +25,9 @@ from collections import Counter
 import copy
 import dataclasses
 import enum
+from functools import partial
 from itertools import chain
+from time import sleep
 import typing
 from typing import (
     Callable,
@@ -158,8 +160,10 @@ def parse_square(name: str) -> Square:
 
     :raises: :exc:`ValueError` if the square name is invalid
     """
-    return SQUARE_NAMES.index(name.upper())
-
+    try:
+        return SQUARE_NAMES.index(name.upper())
+    except ValueError:
+        raise ValueError(f"Invalid square name: {name!r}")
 
 def square_name(square: Square) -> str:
     """
@@ -227,6 +231,7 @@ def square_mirror(sq: Square, vertical=True) -> Square:
         return square(square_file(sq), 10 - square_rank(sq))
     else:
         return square(10 - square_file(sq), square_rank(sq))
+
 
 # try a simple bitboard implementation, represent the 11x11 board as a 121-bit integer
 Bitboard = int
@@ -381,15 +386,13 @@ def _carry_rippler(mask: Bitboard) -> Iterator[Bitboard]:
 
 def flip_vertical(mask: Bitboard) -> Bitboard:
     """Perform a vertical flip, or a little-endian to big-endian conversion."""
-    return sum(
-        ((mask >> (11 * i)) & BB_RANK_1) << (11 * (10 - i)) for i in range(11)
-    )
+    return sum(((mask >> (11 * i)) & BB_RANK_1) << (11 * (10 - i)) for i in range(11))
+
 
 def flip_horizontal(mask: Bitboard) -> Bitboard:
     """Perform a horizonal flip, or a bit reversal."""
-    return sum(
-        ((mask >> i) & BB_FILE_A) << (10 - i) for i in range(11)
-    )
+    return sum(((mask >> i) & BB_FILE_A) << (10 - i) for i in range(11))
+
 
 @dataclasses.dataclass
 class Piece:
@@ -477,10 +480,17 @@ class Move:
 
         # check if this is a move along a rank or file by looking at the last character
         first, last = code.split(".")
-        if last.isdigit():
-            return cls(parse_square(first), parse_square(first[0] + last))
-        else:
-            return cls(parse_square(first), parse_square(last + first[1]))
+        try:
+            parse_square(first)
+
+            if last in RANK_NAMES:
+                return cls(parse_square(first), parse_square(first[0] + last))
+            elif last in FILE_NAMES:
+                return cls(parse_square(first), parse_square(last + first[1]))
+            else:
+                raise ValueError(f"Invalid move code {code!r}")
+        except ValueError as e:
+            raise ValueError(f"Invalid move code {code!r}") from e
 
     @classmethod
     def null(cls) -> "Move":
@@ -686,7 +696,11 @@ class BaseBoard:
             up = shift_up(BB_SQUARES[move]) & opponent & ~self.kings
             if up:
                 # check if there is a friendly piece or the throne or a corner two squares up
-                up = shift_up(up) & (player | BB_THRONE | BB_CORNERS)
+                # if the king is on the throne, the throne check is not valid
+                if self.kings & BB_THRONE:
+                    up = shift_up(up) & (player | BB_CORNERS)
+                else:
+                    up = shift_up(up) & (player | BB_THRONE | BB_CORNERS)
             if up:
                 captures |= BB_SQUARES[move]
                 pieces_captured_by_move |= shift_up(BB_SQUARES[move])
@@ -695,7 +709,10 @@ class BaseBoard:
             # check down
             down = shift_down(BB_SQUARES[move]) & opponent & ~self.kings
             if down:
-                down = shift_down(down) & (player | BB_THRONE | BB_CORNERS)
+                if self.kings & BB_THRONE:
+                    down = shift_down(down) & (player | BB_CORNERS)
+                else:
+                    down = shift_down(down) & (player | BB_THRONE | BB_CORNERS)
             if down:
                 captures |= BB_SQUARES[move]
                 pieces_captured_by_move |= shift_down(BB_SQUARES[move])
@@ -704,7 +721,10 @@ class BaseBoard:
             # check left
             left = shift_left(BB_SQUARES[move]) & opponent & ~self.kings
             if left:
-                left = shift_left(left) & (player | BB_THRONE | BB_CORNERS)
+                if self.kings & BB_THRONE:
+                    left = shift_left(left) & (player | BB_CORNERS)
+                else:
+                    left = shift_left(left) & (player | BB_THRONE | BB_CORNERS)
             if left:
                 captures |= BB_SQUARES[move]
                 pieces_captured_by_move |= shift_left(BB_SQUARES[move])
@@ -713,7 +733,10 @@ class BaseBoard:
             # check right
             right = shift_right(BB_SQUARES[move]) & opponent & ~self.kings
             if right:
-                right = shift_right(right) & (player | BB_THRONE | BB_CORNERS)
+                if self.kings & BB_THRONE:
+                    right = shift_right(right) & (player | BB_CORNERS)
+                else:
+                    right = shift_right(right) & (player | BB_THRONE | BB_CORNERS)
             if right:
                 captures |= BB_SQUARES[move]
                 pieces_captured_by_move |= shift_right(BB_SQUARES[move])
@@ -948,7 +971,7 @@ class BaseBoard:
         builder = self._add_file_names(builder)
         builder = self._add_rank_names(builder)
         return "".join(builder)
-    
+
     def _add_file_names(self, builder: List[str]) -> List[str]:
         """Adds the file (a-k) names to the top of the board string.
 
@@ -957,12 +980,12 @@ class BaseBoard:
         """
         # add the file names to the top of the board
         file_string = "".join(FILE_NAMES)
-        builder.insert(0, f"{file_string}\n")        
+        builder.insert(0, f"{file_string}\n")
         return builder
-    
+
     def _add_rank_names(self, builder: List[str]) -> List[str]:
         """Adds the rank (1-11) names to the board string.
-        
+
         The rank names are added to the end of each rank. 10 and 11 are
         represented by the symbols '+' and '#', respectively.
         Args:
@@ -1034,13 +1057,17 @@ class BaseBoard:
     @classmethod
     def empty(cls: Type[BaseBoardT]) -> BaseBoardT:
         return cls(None)
-    
+
     def copy(self: BaseBoardT) -> BaseBoardT:
         return copy.copy(self)
-    
+
     def mirror(self: BaseBoardT, vertical=True) -> BaseBoardT:
         """Mirrors the board."""
-        return self.transform(flip_vertical) if vertical else self.transform(flip_horizontal)
+        return (
+            self.transform(flip_vertical)
+            if vertical
+            else self.transform(flip_horizontal)
+        )
 
 
 BoardT = TypeVar("BoardT", bound="Board")
@@ -1082,6 +1109,7 @@ class Board(BaseBoard):
     Initialised to standard starting position unless otherwise specified with a
     hnefatafl board code.
     """
+
     starting_code: str = STARTING_POSITION_CODE
     turn: Color = BLACK
     """The side to move (``chess.WHITE`` or ``chess.BLACK``)."""
@@ -1089,8 +1117,7 @@ class Board(BaseBoard):
     move_limit: int = 100
     """The maximum number of moves allowed in a game."""
 
-    def __init__(
-        self: BoardT, code: Optional[str] = STARTING_POSITION_CODE) -> None:
+    def __init__(self: BoardT, code: Optional[str] = STARTING_POSITION_CODE) -> None:
         BaseBoard.__init__(self, None)
         self.turn = BLACK
         self.move_stack = []
@@ -1185,19 +1212,19 @@ class Board(BaseBoard):
                 raise ValueError(
                     f"fullmove number must be positive: {fullmove_number!r}"
                 )
-            
+
     def get_code(self) -> str:
         """Returns a board code."""
         return f"{self.board_code()} {self._get_turn_code()} {self._get_fullmove_number_code()}"
-    
+
     def _get_turn_code(self) -> str:
         """Returns a turn code."""
         return "w" if self.turn is WHITE else "b"
-    
+
     def _get_fullmove_number_code(self) -> str:
         """Returns a fullmove number code."""
         return str(self.fullmove_number)
-        
+
     def ply(self) -> int:
         return 2 * (self.fullmove_number - 1) + (self.turn == WHITE)
 
@@ -1258,7 +1285,7 @@ class Board(BaseBoard):
 
     def is_stalemate(self) -> bool:
         """Check if the game is over due to stalemate."""
-        return not self.legal_moves or self.fullmove_number >= self.move_limit
+        return self.fullmove_number >= self.move_limit or not self.legal_moves
 
     def king_capture(self) -> bool:
         """Check if the king is surrounded by enemy pieces."""
@@ -1304,7 +1331,9 @@ class Board(BaseBoard):
 
         # get the from and to squares
         piece_type = self.piece_at(move.from_square)
-        assert piece_type is not None, f"no piece at {move.from_square}, {move}, {self.board_code()} \n {self}"
+        assert (
+            piece_type is not None
+        ), f"no piece at {move.from_square}, {move}, {self.board_code()} \n {self}"
 
         captured_piece_types = None
         # check whether the move is a capture
@@ -1318,7 +1347,8 @@ class Board(BaseBoard):
         if move.to_square in capture_map.keys():
             self.halfmove_clock = 0
             captured_piece_types = [
-                self._remove_piece_at(sq) for sq in SquareSet(*capture_map[move.to_square])
+                self._remove_piece_at(sq)
+                for sq in SquareSet(*capture_map[move.to_square])
             ]
 
         if captured_piece_types:
@@ -1628,7 +1658,11 @@ class SquareSet:
 
     def mirror(self, vertical=True) -> "SquareSet":
         """Returns a vertically mirrored copy of this square set."""
-        return SquareSet(flip_vertical(self.mask)) if vertical else SquareSet(flip_horizontal(self.mask))
+        return (
+            SquareSet(flip_vertical(self.mask))
+            if vertical
+            else SquareSet(flip_horizontal(self.mask))
+        )
 
     def tolist(self) -> List[bool]:
         """Converts the set to a list of 121 bools."""
@@ -1746,6 +1780,23 @@ class KingCapturedEasierBoard(Board):
         super().__init__(code)
         self.fullmove_number = 1
         self.halfmove_clock = 0
+        self.strict = True
+
+    def generate_legal_moves(self, from_mask: Bitboard = BB_ALL, to_mask: Bitboard = BB_ALL) -> Iterator[Move]:
+        """If there is a move that will end the game, only return those moves if strict is True."""
+        if not self.strict:
+            yield from super().generate_legal_moves(from_mask, to_mask)
+            return
+
+        for move in super().generate_legal_moves(from_mask, to_mask):
+            self.push(move)
+            if self.king_capture() or self.king_escape():
+                yield self.pop()
+                break
+            else:
+                self.pop()
+        else:
+            yield from super().generate_legal_moves(from_mask, to_mask)
 
     def king_capture(self) -> bool:
         """Check if the king is captured either by a sandwich outside of his throne,
@@ -1815,16 +1866,87 @@ class KingCapturedEasierBoard(Board):
 
 
 class KingEscapeAndCaptureEasierBoard(KingCapturedEasierBoard):
-
-
-
-    def __init__(self: BoardT, code: Optional[str] = STARTING_POSITION_CODE) -> None:
+    def __init__(
+        self: BoardT,
+        code: Optional[str] = STARTING_POSITION_CODE,
+        strict: bool = False,
+    ) -> None:
         super().__init__(code)
         self.fullmove_number = 1
         self.halfmove_clock = 0
+        self.strict = strict
 
     def king_escape(self) -> bool:
         return bool(self.kings & BB_EDGE)
+
+    def generate_legal_moves(
+        self, from_mask: Bitboard = BB_ALL, to_mask: Bitboard = BB_ALL
+    ) -> Iterator[Move]:
+        """If there is a move that will end the game, only return those moves if strict is True."""
+        if not self.strict:
+            yield from super().generate_legal_moves(from_mask, to_mask)
+            return
+
+        for move in super().generate_legal_moves(from_mask, to_mask):
+            self.push(move)
+            if self.king_capture() or self.king_escape():
+                yield self.pop()
+                break
+            else:
+                self.pop()
+        else:
+            yield from super().generate_legal_moves(from_mask, to_mask)
+
+import random
+
+def generate_move(mode='random'):
+    if mode == 'random':
+        return generate_random_move
+    elif mode == 'always_cap':
+        return generate_move_always_capture_if_possible
+    else:
+        raise ValueError(f'Unknown mode: {mode}')
+    
+def generate_random_move(board: BoardT) -> Move:
+    return random.choice(list(board.legal_moves))
+
+def generate_move_always_capture_if_possible(board: BoardT) -> Move:
+    for move in board.legal_moves:
+        _, _, capmap = board._captures_possible(move.from_square)
+        if capmap[move.to_square]:
+            return move
+    return random.choice(list(board.legal_moves))
+
+def generate_random_game(_, black_move_mode='random', white_move_mode='random'):
+    Board.move_limit = 500
+    board = KingEscapeAndCaptureEasierBoard(strict=True)
+    # play random moves
+    while not board.is_game_over():
+        if board.turn == BLACK:
+            move = generate_move(black_move_mode)(board)
+        else:
+            move = generate_move(white_move_mode)(board)
+        board.push(move)
+    return board
+
+# set move moves without losing the ability to pickle the generate_random_game function for multiprocessing
+generate_random_game_black_always_captures = partial(generate_random_game, black_move_mode='always_cap', white_move_mode='random')
+generate_random_game_white_always_captures = partial(generate_random_game, black_move_mode='random', white_move_mode='always_cap')
+generate_random_game_always_captures = partial(generate_random_game, black_move_mode='always_cap', white_move_mode='always_cap')
+
+def generate_games(num=10000, game_func=generate_random_game):
+    from tqdm import tqdm
+    # multiprocessing
+    from multiprocessing import Pool
+
+    # generate a bunch of games
+    games = []
+    # multiprocessing with tqdm
+    with Pool() as p:
+        games.extend(
+            iter(tqdm(p.imap_unordered(game_func, range(num)), total=num))
+        )
+    return games
 
 
 if __name__ == "__main__":
@@ -1843,28 +1965,70 @@ if __name__ == "__main__":
     . . . . . 1 . . . . . +
     . . . 1 1 1 1 1 . . . *
     """
-    import random
+    # %%
+    from hnefatafl import *
+    games = generate_games(1000, generate_random_game_always_captures)
+    # %%
+    # replay a game from the list of games
+    board = KingEscapeAndCaptureEasierBoard(strict=True)
+    for game in games:
+        if game.outcome().winner is not None:
+            for state in game._stack:
+                state.restore(board)
+                print(board)
+                if board.is_game_over():
+                    print(board.outcome())
+                    sleep(5)
+                    break
+                sleep(0.5)
+                # clear the output
+                import os
+                os.system("cls" if os.name == "nt" else "clear")
+    # %%
+    # get the stats for the games
+    import pandas as pd
 
-    # # generate a bunch of games
-    # games = []
-    # for _ in range(10000):
-    #     board = KingEscapeAndCaptureEasierBoard(move_limit=1000)
-    #     # play random moves
-    #     while not board.is_game_over():
-    #         move = random.choice(list(board.legal_moves))
-    #         board.push(move)
-    #     games.append(board)
+    df = pd.DataFrame(
+        [
+            {
+                "winner": game.outcome().winner,
+                "termination": str(game.outcome().termination),
+                "move_count": len(game.move_stack),
+                "move_limit": game.move_limit,
+            }
+            for game in games
+        ]
+    )
+    df
 
-    # # get the outcome of each game
-    # outcomes = [game.outcome() for game in games]
-    # # get the winner of each game
-    # winners = [f"{outcome.result()}|{outcome.termination}" for outcome in outcomes]
-    # # get the number of times each player won
-    # counts = Counter(winners)
-    # print(counts)
-    # # get the average number of moves per game
-    # moves = [game.fullmove_number for game in games]
-    # print(sum(moves) / len(moves))
+    # %%
+    # plot the stats
+    import seaborn as sns
 
-    board = KingEscapeAndCaptureEasierBoard()
-    print(board)
+    sns.set_theme(style="whitegrid")
+    ax = sns.countplot(x="winner", data=df)
+    ax.set_title("King Escape and Capture Easier Board")
+    ax.set_xlabel("Winner")
+    ax.set_ylabel("Count")
+    ax.figure.savefig("king_escape_and_capture_easier_board.png")
+    # %%
+    # plot the stats
+    import seaborn as sns
+
+    sns.set_theme(style="whitegrid")
+    ax = sns.countplot(x="termination", data=df)
+    ax.set_title("King Escape and Capture Easier Board")
+    ax.set_xlabel("Termination")
+    ax.set_ylabel("Count")
+    ax.figure.savefig("king_escape_and_capture_easier_board_termination.png")
+
+    # %%
+    # plot the stats
+    import seaborn as sns
+
+    sns.set_theme(style="whitegrid")
+    ax = sns.histplot(x="move_count", data=df)
+    ax.set_title("King Escape and Capture Easier Board")
+    ax.set_xlabel("Move Count")
+    ax.set_ylabel("Count")
+    ax.figure.savefig("king_escape_and_capture_easier_board_move_count.png")
