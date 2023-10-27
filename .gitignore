@@ -3,4 +3,10 @@
 
 # pycache
 __pycache__
-.vscode
+.pytest_cache
+
+# dist
+dist
+
+# virtualenv
+.venv

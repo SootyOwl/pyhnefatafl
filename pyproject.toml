@@ -1,10 +1,15 @@
 [tool.poetry]
-name = "hnefatafl"
-version = "0.2.0"
+name = "pyhnefatafl"
+version = "0.2.1a0"
 description = "Hnefatafl (11x11) game engine for Python"
-authors = ["SootyOwl <you@example.com>"]
+authors = ["SootyOwl <tyto@tyto.cc>"]
 readme = "README.md"
 packages = [{ include = "hnefatafl", from = "src" }]
+license = "GPL-3.0-or-later"
+repository = "https://github.com/SootyOwl/pyhnefatafl"
+classifiers = [
+    "Topic :: Games/Entertainment :: Board Games",
+]
 
 [tool.poetry.dependencies]
 python = "^3.8 <3.12"

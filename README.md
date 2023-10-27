@@ -1,6 +1,6 @@
 # PyHnefatafl - A Python library for the Hnefatafl board game
 
-Allowing you to play the game of Hnefatafl in Python.
+Allowing you to play the game of Hnefatafl in Python. Based on `chess`: https://pypi.org/project/chess/
 
 ## Progress
 
