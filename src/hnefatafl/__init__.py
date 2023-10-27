@@ -764,6 +764,16 @@ class BaseBoard:
         for move in scan_forward(self._moves(square)):
             threatened |= self._captures(move)
         return threatened
+    
+    # compute all possible captures at the current board state
+    def _all_capture_moves(self, color: Color) -> List[Move]:
+        moves = []
+        for square in scan_forward(self.occupied_co[color]):
+            captures, pieces_captured_by_move, capture_dict = self._captures_possible(square)
+            if captures:
+                for move in scan_forward(captures):
+                    moves.append(Move(square, move))
+        return moves
 
     def _get_adjacent_squares(self, square: Square) -> Bitboard:
         bb = BB_SQUARES[square]
@@ -1252,7 +1262,7 @@ class Board(BaseBoard):
         return move in self.generate_legal_moves()
 
     def is_capture(self, move: Move) -> bool:
-        return Move.to_square in self.captures(Move.from_square)
+        return move.to_square in self.captures(move.from_square)
 
     def is_game_over(self) -> bool:
         return self.outcome() is not None
@@ -1274,9 +1284,9 @@ class Board(BaseBoard):
         Alternatively use :func:`is_game_over() <chess.Board.is_game_over()>`
         to just check if the game is over.
         """
-        if self.king_capture():
+        if self.king_captured():
             return Outcome(termination=Termination.KING_CAPTURED, winner=BLACK)
-        elif self.king_escape():
+        elif self.king_escaped():
             return Outcome(termination=Termination.KING_ESCAPED, winner=WHITE)
         elif self.is_stalemate():
             return Outcome(termination=Termination.STALEMATE, winner=None)
@@ -1287,7 +1297,7 @@ class Board(BaseBoard):
         """Check if the game is over due to stalemate."""
         return self.fullmove_number >= self.move_limit or not self.legal_moves
 
-    def king_capture(self) -> bool:
+    def king_captured(self) -> bool:
         """Check if the king is surrounded by enemy pieces."""
         king_bb = self.kings
         king_location = lsb(king_bb)
@@ -1302,7 +1312,7 @@ class Board(BaseBoard):
         surrounding_square = self.get_adjacent_empty_squares(king_location)
         return surrounding_square == BB_THRONE
 
-    def king_escape(self) -> bool:
+    def king_escaped(self) -> bool:
         """Check if the king is at one of the four corners."""
         king_location = self.kings
         return bool(king_location & BB_CORNERS)
@@ -1790,7 +1800,7 @@ class KingCapturedEasierBoard(Board):
 
         for move in super().generate_legal_moves(from_mask, to_mask):
             self.push(move)
-            if self.king_capture() or self.king_escape():
+            if self.king_captured() or self.king_escaped():
                 yield self.pop()
                 break
             else:
@@ -1798,7 +1808,7 @@ class KingCapturedEasierBoard(Board):
         else:
             yield from super().generate_legal_moves(from_mask, to_mask)
 
-    def king_capture(self) -> bool:
+    def king_captured(self) -> bool:
         """Check if the king is captured either by a sandwich outside of his throne,
         or by being surrounded by 4 enemies on the throne.
         """
@@ -1876,7 +1886,7 @@ class KingEscapeAndCaptureEasierBoard(KingCapturedEasierBoard):
         self.halfmove_clock = 0
         self.strict = strict
 
-    def king_escape(self) -> bool:
+    def king_escaped(self) -> bool:
         return bool(self.kings & BB_EDGE)
 
     def generate_legal_moves(
@@ -1889,7 +1899,7 @@ class KingEscapeAndCaptureEasierBoard(KingCapturedEasierBoard):
 
         for move in super().generate_legal_moves(from_mask, to_mask):
             self.push(move)
-            if self.king_capture() or self.king_escape():
+            if self.king_captured() or self.king_escaped():
                 yield self.pop()
                 break
             else:
@@ -1911,11 +1921,12 @@ def generate_random_move(board: BoardT) -> Move:
     return random.choice(list(board.legal_moves))
 
 def generate_move_always_capture_if_possible(board: BoardT) -> Move:
-    for move in board.legal_moves:
-        _, _, capmap = board._captures_possible(move.from_square)
-        if capmap[move.to_square]:
-            return move
-    return random.choice(list(board.legal_moves))
+    caps = board._all_capture_moves(board.turn)
+    if caps:
+        return random.choice(list(caps))
+    else:
+        return generate_random_move(board)
+
 
 def generate_random_game(_, black_move_mode='random', white_move_mode='random'):
     Board.move_limit = 500
@@ -1965,12 +1976,9 @@ if __name__ == "__main__":
     . . . . . 1 . . . . . +
     . . . 1 1 1 1 1 . . . *
     """
-    # %%
     from hnefatafl import *
-    games = generate_games(1000, generate_random_game_always_captures)
-    # %%
-    # replay a game from the list of games
-    board = KingEscapeAndCaptureEasierBoard(strict=True)
+    games = generate_games(100, generate_random_game_always_captures)
+    board = KingEscapeAndCaptureEasierBoard(strict=False)
     for game in games:
         if game.outcome().winner is not None:
             for state in game._stack:
@@ -1984,51 +1992,18 @@ if __name__ == "__main__":
                 # clear the output
                 import os
                 os.system("cls" if os.name == "nt" else "clear")
-    # %%
-    # get the stats for the games
-    import pandas as pd
+            break
 
-    df = pd.DataFrame(
-        [
-            {
-                "winner": game.outcome().winner,
-                "termination": str(game.outcome().termination),
-                "move_count": len(game.move_stack),
-                "move_limit": game.move_limit,
-            }
-            for game in games
-        ]
-    )
-    df
-
-    # %%
-    # plot the stats
-    import seaborn as sns
-
-    sns.set_theme(style="whitegrid")
-    ax = sns.countplot(x="winner", data=df)
-    ax.set_title("King Escape and Capture Easier Board")
-    ax.set_xlabel("Winner")
-    ax.set_ylabel("Count")
-    ax.figure.savefig("king_escape_and_capture_easier_board.png")
-    # %%
-    # plot the stats
-    import seaborn as sns
-
-    sns.set_theme(style="whitegrid")
-    ax = sns.countplot(x="termination", data=df)
-    ax.set_title("King Escape and Capture Easier Board")
-    ax.set_xlabel("Termination")
-    ax.set_ylabel("Count")
-    ax.figure.savefig("king_escape_and_capture_easier_board_termination.png")
-
-    # %%
-    # plot the stats
-    import seaborn as sns
-
-    sns.set_theme(style="whitegrid")
-    ax = sns.histplot(x="move_count", data=df)
-    ax.set_title("King Escape and Capture Easier Board")
-    ax.set_xlabel("Move Count")
-    ax.set_ylabel("Count")
-    ax.figure.savefig("king_escape_and_capture_easier_board_move_count.png")
+    # summarize the games
+    winners = [game.outcome().winner for game in games]
+    print("Number of games:", len(games))
+    print("Number of white wins:", winners.count(WHITE))
+    print("Number of black wins:", winners.count(BLACK))
+    print("Number of draws:", winners.count(None))
+    # average number of moves
+    print("Average number of moves:", sum(len(game.move_stack) for game in games) / len(games))
+    # average number of captures
+    print("Average number of captures:", sum(len(game._captured_pieces[WHITE]) + len(game._captured_pieces[BLACK]) for game in games) / len(games))
+    # average number of captures per color
+    print("Average number of white captures:", sum(len(game._captured_pieces[WHITE]) for game in games) / len(games))
+    print("Average number of black captures:", sum(len(game._captured_pieces[BLACK]) for game in games) / len(games))
