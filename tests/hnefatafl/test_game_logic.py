@@ -576,3 +576,17 @@ def test_strict_mode_king_escape(empty_board: KingEscapeAndCaptureEasierBoard):
     assert empty_board.outcome() is not None
     assert empty_board.outcome().winner == WHITE
     
+
+# test that just plays random sample games (legal moves only) and ensures nothing goes wrong
+def test_play_random_games(board: KingEscapeAndCaptureEasierBoard):
+    import random
+
+    random.seed(0)
+    played = 0
+    for _ in range(100):
+        while not board.is_game_over():
+            move = random.choice(list(board.legal_moves))
+            board.push(move)
+        played += 1
+        board.reset()
+    assert played == 100
