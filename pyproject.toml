@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pyhnefatafl"
-version = "0.2.1a0"
+version = "0.2.1"
 description = "Hnefatafl (11x11) game engine for Python"
 authors = ["SootyOwl <tyto@tyto.cc>"]
 readme = "README.md"

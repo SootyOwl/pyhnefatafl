@@ -444,19 +444,20 @@ class Move:
     """The target square."""
 
     def __str__(self) -> str:
-        return self.code()
+        return self.code
 
     def __repr__(self) -> str:
-        return f"Move.from_code({self.code()!r})"
+        return f"Move.from_code({self.code!r})"
 
     def __bool__(self) -> bool:
         return bool(self.from_square != self.to_square)
 
+    @property
     def code(self) -> str:
         """Returns the move code in algebraic notation.
 
-        For example, ``a4b`` indicates the piece moves from A4 to B4, and
-        ``a45`` indicates the piece moves from A4 to A5.
+        For example, ``A4.B`` indicates the piece moves from A4 to B4, and
+        ``A5.4`` indicates the piece moves from A4 to A5.
         As all pieces move orthogonally, the move code is simply the source
         square followed by the target square's rank OR file, depending on
         which is different.
@@ -1267,10 +1268,12 @@ class Board(BaseBoard):
     def is_game_over(self) -> bool:
         return self.outcome() is not None
 
+    @property
     def winner(self) -> Optional[Color]:
         outcome = self.outcome()
         return outcome.winner if outcome else None
 
+    @property
     def result(self) -> str:
         outcome = self.outcome()
         return outcome.result() if outcome else "*"
@@ -1395,7 +1398,7 @@ class Board(BaseBoard):
             return move
         else:
             raise IllegalMoveError(
-                f"no matching legal move for {move.code()} ({SQUARE_NAMES[from_square]} -> {SQUARE_NAMES[to_square]}) in {self.board_code()}"
+                f"no matching legal move for {move.code} ({SQUARE_NAMES[from_square]} -> {SQUARE_NAMES[to_square]}) in {self.board_code()}"
             )
 
     def copy(self: BoardT, *, stack: Union[bool, int] = True) -> BoardT:
@@ -1429,7 +1432,7 @@ class LegalMoveGenerator:
         return self.board.is_legal(move)
 
     def __repr__(self) -> str:
-        codes = ", ".join(move.code() for move in self)
+        codes = ", ".join(move.code for move in self)
         return f"<LegalMoveGenerator at {id(self):#x} ({codes})>"
 
 

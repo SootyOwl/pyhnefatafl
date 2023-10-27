@@ -39,6 +39,7 @@ from hnefatafl import (
     KingEscapeAndCaptureEasierBoard,
     Move,
     Piece,
+    SquareSet,
     Termination,
     square,
     parse_square,
@@ -590,3 +591,24 @@ def test_play_random_games(board: KingEscapeAndCaptureEasierBoard):
         played += 1
         board.reset()
     assert played == 100
+
+
+# test the board.kings is updated on a king move
+def test_board_kings_updated_on_king_move(empty_board: KingEscapeAndCaptureEasierBoard):
+    empty_board.set_piece_map(
+        {
+            parse_square("e7"): Piece.from_symbol("K"),
+            parse_square("e6"): Piece.from_symbol("m"),
+            parse_square("e8"): Piece.from_symbol("m"),
+            parse_square("d6"): Piece.from_symbol("m"),
+            parse_square("f7"): Piece.from_symbol("m"),
+        }
+    )
+    empty_board.turn = WHITE
+    assert empty_board.kings == SquareSet([parse_square("e7")])
+    move = Move(parse_square("e7"), parse_square("a7"))
+    assert empty_board.is_legal(move) is True, f"Move {move} should be legal."
+
+    # make the move
+    empty_board.push(move)
+    assert empty_board.kings == SquareSet([parse_square("a7")])
