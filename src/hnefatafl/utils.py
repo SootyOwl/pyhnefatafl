@@ -15,11 +15,12 @@ def prettify_board(board: hn.BoardT) -> str:
     # replace the empty squares with an empty square symbol
     board_str = board_str.replace(".", "·")
     # replace the pieces
-    board_str = board_str.replace("m", "♟")
-    board_str = board_str.replace("M", "♙")
-    board_str = board_str.replace("K", "♔")
+    board_str = board_str.replace("m", "♙")
+    board_str = board_str.replace("M", "♟")
+    # black king
+    board_str = board_str.replace("K", "♚")
     # fix the K column
-    board_str = board_str.replace("♔", "K", 1)
+    board_str = board_str.replace("♚", "K", 1)
     return board_str
 
 def get_observation(board: hn.BoardT, player: hn.Color) -> np.ndarray:
