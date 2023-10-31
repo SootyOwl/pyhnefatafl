@@ -688,7 +688,7 @@ class BaseBoard:
         pieces_captured_by_move = BB_EMPTY
         capture_dict = {}
         for move in scan_forward(moves):
-            capture_dict[move] = []
+            capture_dict[move] = 0
             # we need to look at each move and check two steps in each direction
             # if we find an enemy piece adjacent and a friendly piece on the other side,
             # this move is a capture
@@ -705,8 +705,7 @@ class BaseBoard:
             if up:
                 captures |= BB_SQUARES[move]
                 pieces_captured_by_move |= shift_up(BB_SQUARES[move])
-                capture_dict[move].append(shift_up(BB_SQUARES[move]))
-                continue
+                capture_dict[move] |= shift_up(BB_SQUARES[move])
             # check down
             down = shift_down(BB_SQUARES[move]) & opponent & ~self.kings
             if down:
@@ -717,8 +716,7 @@ class BaseBoard:
             if down:
                 captures |= BB_SQUARES[move]
                 pieces_captured_by_move |= shift_down(BB_SQUARES[move])
-                capture_dict[move].append(shift_down(BB_SQUARES[move]))
-                continue
+                capture_dict[move] |= shift_down(BB_SQUARES[move])
             # check left
             left = shift_left(BB_SQUARES[move]) & opponent & ~self.kings
             if left:
@@ -729,8 +727,7 @@ class BaseBoard:
             if left:
                 captures |= BB_SQUARES[move]
                 pieces_captured_by_move |= shift_left(BB_SQUARES[move])
-                capture_dict[move].append(shift_left(BB_SQUARES[move]))
-                continue
+                capture_dict[move] |= shift_left(BB_SQUARES[move])
             # check right
             right = shift_right(BB_SQUARES[move]) & opponent & ~self.kings
             if right:
@@ -741,8 +738,7 @@ class BaseBoard:
             if right:
                 captures |= BB_SQUARES[move]
                 pieces_captured_by_move |= shift_right(BB_SQUARES[move])
-                capture_dict[move].append(shift_right(BB_SQUARES[move]))
-                continue
+                capture_dict[move] |= shift_right(BB_SQUARES[move])
 
         return captures, pieces_captured_by_move, capture_dict
 
@@ -1357,11 +1353,11 @@ class Board(BaseBoard):
         # put the piece at the to square
         self._set_piece_at(move.to_square, piece_type.piece_type, self.turn)
 
-        if move.to_square in capture_map.keys():
+        if move.to_square in capture_map.keys() and capture_map[move.to_square]:
             self.halfmove_clock = 0
             captured_piece_types = [
                 self._remove_piece_at(sq)
-                for sq in SquareSet(*capture_map[move.to_square])
+                for sq in SquareSet(capture_map[move.to_square])
             ]
 
         if captured_piece_types:
@@ -1504,6 +1500,8 @@ class SquareSet:
     >>> int(squares)
     72057594037928191
 
+    >>> squares = SquareSet.from_mask(0x0100_0000_0000_0001)
+
     Also supports common set operations like
     :func:`~chess.SquareSet.issubset()`, :func:`~chess.SquareSet.issuperset()`,
     :func:`~chess.SquareSet.union()`, :func:`~chess.SquareSet.intersection()`,
@@ -1528,6 +1526,13 @@ class SquareSet:
         # backtraces.
         for square in squares:  # type: ignore
             self.add(square)
+
+    @classmethod
+    def from_bb(cls, mask: Bitboard) -> "SquareSet":
+        """Creates a square set from a bitboard mask."""
+        s = cls()
+        s.mask = mask
+        return s
 
     # Set
 

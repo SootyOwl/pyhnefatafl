@@ -612,3 +612,32 @@ def test_board_kings_updated_on_king_move(empty_board: KingEscapeAndCaptureEasie
     # make the move
     empty_board.push(move)
     assert empty_board.kings == SquareSet([parse_square("a7")])
+
+
+# test multiple pieces can be captured in one move
+def test_multiple_pieces_can_be_captured(empty_board: KingEscapeAndCaptureEasierBoard):
+    # set up board
+    # 'm' pieces on G5, K7, and E7
+    # 'M' pieces on G6 and F7
+    # moving the K7 piece to G7 should capture both 'M' pieces
+    empty_board.set_piece_map(
+        {
+            parse_square("f6"): Piece.from_symbol("K"),
+            parse_square("g5"): Piece.from_symbol("m"),
+            parse_square("g6"): Piece.from_symbol("M"),
+            parse_square("e7"): Piece.from_symbol("m"),
+            parse_square("f7"): Piece.from_symbol("M"),
+            parse_square("k7"): Piece.from_symbol("m"),
+        }
+    )
+    empty_board.turn = BLACK
+    move = Move(parse_square("k7"), parse_square("g7"))
+    assert empty_board.is_legal(move) is True, f"Move {move} should be legal."
+
+    # make the move
+    empty_board.push(move)
+    assert empty_board.piece_at(parse_square("k7")) is None, f"Piece at {parse_square('k7')} should have moved."
+    assert empty_board.piece_at(parse_square("g7")) is not None
+
+    assert (empty_board.piece_at(parse_square("f7")) is None
+            and empty_board.piece_at(parse_square("g6")) is None), f"Piece at {parse_square('f7')} and {parse_square('g6')} should have been captured."
