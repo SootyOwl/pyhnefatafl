@@ -9,18 +9,25 @@ from hnefatafl import Board, BoardT, KingEscapeAndCaptureEasierBoard, Move, BLAC
 # abstract base class
 class Player(metaclass=ABCMeta):
     """Player class for playing Hnefatafl."""
-    def __init__(self, color: Color) -> None:
+    def __init__(self, color: Color, name: str) -> None:
         self.color = color
+        self.name = name
 
     @abstractmethod
     def get_move(self, board: BoardT) -> Move:
         """Get a move for the given board."""
         raise NotImplementedError
     
+    @abstractmethod
+    def handle_game_over(self, board: BoardT) -> None:
+        """Handle the game being over, e.g. print the result."""
+        raise NotImplementedError
+
+PlayerT = Player
 
 class HumanPlayer(Player):
-    def __init__(self, color: Color, outputfn = str) -> None:
-        super().__init__(color)
+    def __init__(self, color: Color, name: str = "Human", outputfn = str) -> None:
+        super().__init__(color, name)
         self.p = outputfn
 
     def get_move(self, board: BoardT) -> Move:
@@ -28,28 +35,43 @@ class HumanPlayer(Player):
         # Print the board.
         print(self.p(board))
         # Get the move in pyhnefatafl notation from the user.
-        move = input("Enter a move: ")
+        print(f"Player {self.name} ({COLOR_NAMES[self.color]})")
+        move = input(f"Enter a move: ")
         # Parse the move.
         move = Move.from_code(move)
         # Return the move.
         return move
     
+    def handle_game_over(self, board: BoardT) -> None:
+        """Handle the game being over, e.g. print the result."""
+        # Print the board.
+        print(self.p(board))
+        # Print the result.
+        if board.outcome().winner == self.color:
+            print(f"Player {self.name} won!")
+        else:
+            print(f"Player {self.name} lost!")
+
 
 class RandomPlayer(Player):
     """Player that plays random legal moves."""
-    def __init__(self, color: Color) -> None:
-        super().__init__(color)
+    def __init__(self, color: Color, name: str = "RandoAI") -> None:
+        super().__init__(color, name)
 
     def get_move(self, board: BoardT) -> Move:
         """Get a move for the given board."""
         move = random.choice(list(board.legal_moves))
         return move
     
+    def handle_game_over(self, board: BoardT) -> None:
+        # do nothing on game over for random player
+        pass
+    
 
 class GreedyPlayer(Player):
     """Player that always captures if possible."""
-    def __init__(self, color: Color) -> None:
-        super().__init__(color)
+    def __init__(self, color: Color, name: str = "GreedyAI") -> None:
+        super().__init__(color, name)
 
     def get_move(self, board: BoardT) -> Move:
         """Get a move for the given board."""
@@ -59,10 +81,14 @@ class GreedyPlayer(Player):
         else:
             return random.choice(list(board.legal_moves))
         
+    def handle_game_over(self, board: BoardT) -> None:
+        # do nothing on game over for greedy player
+        pass
+        
 class GreedyWithKingPlayer(GreedyPlayer):
     """Player that always captures if possible, including the king."""
-    def __init__(self, color: Color) -> None:
-        super().__init__(color)
+    def __init__(self, color: Color, name: str = "GreedyAI") -> None:
+        super().__init__(color, name)
 
     def get_move(self, board: BoardT) -> Move:
         """Get a move for the given board."""
@@ -110,9 +136,13 @@ class GreedyWithKingPlayer(GreedyPlayer):
 class Game:
     """Game class for running a game of Hnefatafl."""
 
-    def __init__(self, board: BoardT, player_black: Player, player_white: Player, outputfn = str) -> None:
+    def __init__(self, board: BoardT, players: list[PlayerT], outputfn = str) -> None:
         self.board: BoardT = board()
-        self.players = [player_black, player_white]
+        # Create the players. Players are instantiated with the color they play, (i.e. player.color = BLACK or WHITE)
+        self.players: dict[Color, PlayerT] = {player.color: player for player in players}
+        # assert that we have a black and white player, and that they are different players
+        assert BLACK in self.players and WHITE in self.players
+        assert self.players[BLACK] != self.players[WHITE]
         self.p = outputfn
 
     def play(self) -> None:
@@ -123,16 +153,14 @@ class Game:
             # Play the move.
             self.board.push(move)
             # Output the move.
-            print(f"Player {COLOR_NAMES[not self.board.turn]} played {move}.")
-        # Print the board.
-        print(self.output(self.board))
-        # Print the winner.
-        print(f"Winner: {COLOR_NAMES[self.board.winner]}")
-        print(f"Win reason: {self.board.outcome().termination}")
+            print(f"Player {self.players[not self.board.turn].name} played {move}.")
+        self.handle_game_over()
 
-    def output(self, board: BoardT) -> str:
-        """Output the board."""
-        return self.p(board)
+    def handle_game_over(self) -> None:
+        """Handle the game being over. Notify the players."""
+        # Notify the players.
+        for player in self.players.values():
+            player.handle_game_over(self.board)
 
 
 if __name__ == "__main__":
