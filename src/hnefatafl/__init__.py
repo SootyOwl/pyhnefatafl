@@ -1066,7 +1066,9 @@ class BaseBoard:
         return cls(None)
 
     def copy(self: BaseBoardT) -> BaseBoardT:
-        return copy.copy(self)
+        board = type(self)(None)
+        board._set_piece_map(self.piece_map())
+        return board
 
     def mirror(self: BaseBoardT, vertical=True) -> BaseBoardT:
         """Mirrors the board."""
