@@ -1067,8 +1067,15 @@ class BaseBoard:
 
     def copy(self: BaseBoardT) -> BaseBoardT:
         board = type(self)(None)
-        board._set_piece_map(self.piece_map())
+        board.men = self.men
+        board.kings = self.kings
+        board.occupied_co[WHITE] = self.occupied_co[WHITE]
+        board.occupied_co[BLACK] = self.occupied_co[BLACK]
+        board.occupied = self.occupied
         return board
+    
+    def __copy__(self: BaseBoardT) -> BaseBoardT:
+        return self.copy()
 
     def mirror(self: BaseBoardT, vertical=True) -> BaseBoardT:
         """Mirrors the board."""
